@@ -150,10 +150,18 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageInfo(JNIEnv *env, jobject, jlong
     return result;
 }
 
-// Renders a page scaled to fill the supplied ARGB_8888 bitmap.
+// Renders part of a page into the supplied ARGB_8888 bitmap.
+//
+// The page is conceptually scaled to pageWidth x pageHeight, and the region of
+// that scaled page starting at (clipX, clipY) and the size of the bitmap is
+// what gets written. Passing the bitmap's own dimensions as the page size with
+// a (0,0) clip renders the whole page; a larger page size with a moving clip is
+// how zoomed/tiled rendering works.
 JNIEXPORT jboolean JNICALL
 Java_com_djvureader_app_DjvuNative_nativeRenderPage(JNIEnv *env, jobject, jlong handle,
-                                                   jint pageNumber, jobject bitmap) {
+                                                   jint pageNumber, jobject bitmap,
+                                                   jint pageWidth, jint pageHeight,
+                                                   jint clipX, jint clipY) {
     Document *doc = asDocument(handle);
     if (!doc || !doc->document || !bitmap) {
         return JNI_FALSE;
@@ -168,6 +176,17 @@ Java_com_djvureader_app_DjvuNative_nativeRenderPage(JNIEnv *env, jobject, jlong 
         return JNI_FALSE;
     }
     if (bitmapInfo.width == 0 || bitmapInfo.height == 0) {
+        return JNI_FALSE;
+    }
+    if (pageWidth <= 0 || pageHeight <= 0 || clipX < 0 || clipY < 0) {
+        return JNI_FALSE;
+    }
+    // The requested region has to sit inside the scaled page.
+    if (clipX + static_cast<jint>(bitmapInfo.width) > pageWidth ||
+        clipY + static_cast<jint>(bitmapInfo.height) > pageHeight) {
+        __android_log_print(ANDROID_LOG_ERROR, kTag,
+                            "clip %dx%d at (%d,%d) exceeds page %dx%d", bitmapInfo.width,
+                            bitmapInfo.height, clipX, clipY, pageWidth, pageHeight);
         return JNI_FALSE;
     }
 
@@ -209,14 +228,21 @@ Java_com_djvureader_app_DjvuNative_nativeRenderPage(JNIEnv *env, jobject, jlong 
     // image, so start from opaque white rather than whatever the bitmap held.
     std::memset(pixels, 0xFF, static_cast<size_t>(bitmapInfo.stride) * bitmapInfo.height);
 
-    ddjvu_rect_t rect;
-    rect.x = 0;
-    rect.y = 0;
-    rect.w = bitmapInfo.width;
-    rect.h = bitmapInfo.height;
+    ddjvu_rect_t pageRect;
+    pageRect.x = 0;
+    pageRect.y = 0;
+    pageRect.w = static_cast<unsigned int>(pageWidth);
+    pageRect.h = static_cast<unsigned int>(pageHeight);
 
-    const int rendered = ddjvu_page_render(page, DDJVU_RENDER_COLOR, &rect, &rect, format,
-                                           bitmapInfo.stride, static_cast<char *>(pixels));
+    ddjvu_rect_t renderRect;
+    renderRect.x = clipX;
+    renderRect.y = clipY;
+    renderRect.w = bitmapInfo.width;
+    renderRect.h = bitmapInfo.height;
+
+    const int rendered = ddjvu_page_render(page, DDJVU_RENDER_COLOR, &pageRect, &renderRect,
+                                           format, bitmapInfo.stride,
+                                           static_cast<char *>(pixels));
 
     AndroidBitmap_unlockPixels(env, bitmap);
     ddjvu_format_release(format);

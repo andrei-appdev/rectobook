@@ -31,11 +31,34 @@ class DjvuDocument private constructor(private var handle: Long) : Closeable {
      * Renders [pageNumber] scaled to [width] x [height]. Returns null if the
      * page could not be decoded.
      */
-    fun renderPage(pageNumber: Int, width: Int, height: Int): Bitmap? {
+    fun renderPage(pageNumber: Int, width: Int, height: Int): Bitmap? =
+        renderRegion(pageNumber, width, height, 0, 0, width, height)
+
+    /**
+     * Renders a [regionWidth] x [regionHeight] region of [pageNumber], taken
+     * from the page scaled to [pageWidth] x [pageHeight] and offset by
+     * ([clipX], [clipY]).
+     *
+     * This is the primitive behind zoomed and tiled rendering: hold the region
+     * at viewport size while growing the page size to zoom in.
+     */
+    fun renderRegion(
+        pageNumber: Int,
+        pageWidth: Int,
+        pageHeight: Int,
+        clipX: Int,
+        clipY: Int,
+        regionWidth: Int,
+        regionHeight: Int,
+    ): Bitmap? {
         checkOpen()
-        require(width > 0 && height > 0) { "target size must be positive" }
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
-        if (!DjvuNative.nativeRenderPage(handle, pageNumber, bitmap)) {
+        require(pageWidth > 0 && pageHeight > 0) { "page size must be positive" }
+        require(regionWidth > 0 && regionHeight > 0) { "region size must be positive" }
+        val bitmap = Bitmap.createBitmap(regionWidth, regionHeight, Bitmap.Config.ARGB_8888)
+        val ok = DjvuNative.nativeRenderPage(
+            handle, pageNumber, bitmap, pageWidth, pageHeight, clipX, clipY,
+        )
+        if (!ok) {
             bitmap.recycle()
             return null
         }

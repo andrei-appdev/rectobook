@@ -26,6 +26,21 @@ internal object DjvuNative {
     /** Returns `[width, height, dpi]` in the page's own pixels, or null on failure. */
     external fun nativeGetPageInfo(handle: Long, pageNumber: Int): IntArray?
 
-    /** Renders [pageNumber] scaled to fill [bitmap], which must be ARGB_8888. */
-    external fun nativeRenderPage(handle: Long, pageNumber: Int, bitmap: Bitmap): Boolean
+    /**
+     * Renders part of [pageNumber] into [bitmap], which must be ARGB_8888.
+     *
+     * The page is scaled to [pageWidth] x [pageHeight]; the region of that
+     * scaled page at ([clipX], [clipY]) sized to the bitmap is what gets
+     * written. Bitmap-sized page dimensions with a (0,0) clip render the whole
+     * page.
+     */
+    external fun nativeRenderPage(
+        handle: Long,
+        pageNumber: Int,
+        bitmap: Bitmap,
+        pageWidth: Int,
+        pageHeight: Int,
+        clipX: Int,
+        clipY: Int,
+    ): Boolean
 }
