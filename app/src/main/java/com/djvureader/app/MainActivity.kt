@@ -1,6 +1,5 @@
 package com.djvureader.app
 
-import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -12,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -50,10 +50,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
@@ -73,6 +77,9 @@ private const val ZOOM_STEP = 1.5f
 
 /** How long the page must settle before reading progress is written. */
 private const val PROGRESS_SAVE_DELAY_MS = 600L
+
+/** How long zoom must settle before pages are re-rendered at the new scale. */
+private const val ZOOM_SETTLE_DELAY_MS = 150L
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -238,51 +245,138 @@ private fun DocumentReader(
         // re-rendered at the new width, so they stay sharp and the list keeps
         // correct scroll extents.
         var zoom by remember { mutableFloatStateOf(MIN_ZOOM) }
+        // Pages lay out at `zoom` immediately but are re-rendered only at
+        // `renderZoom`. A pinch changes zoom every frame, and re-rendering on
+        // each one would cancel the previous decode over and over.
+        var renderZoom by remember { mutableFloatStateOf(MIN_ZOOM) }
+        // Live pinch state: scale applied on the GPU until the fingers lift.
+        var gestureScale by remember { mutableFloatStateOf(1f) }
+        var gestureFocus by remember { mutableStateOf(Offset.Zero) }
         val horizontalScroll = rememberScrollState()
 
         LaunchedEffect(zoom) {
             if (zoom == MIN_ZOOM) horizontalScroll.scrollTo(0)
+            delay(ZOOM_SETTLE_DELAY_MS)
+            renderZoom = zoom
         }
 
         BoxWithConstraints(modifier = Modifier.weight(1f)) {
             val contentWidth = (constraints.maxWidth * zoom).toInt()
+            val renderWidth = (constraints.maxWidth * renderZoom).toInt()
             val contentWidthDp = with(LocalDensity.current) { contentWidth.toDp() }
+
+            /**
+             * Zooms by [scale] about [focus], given in viewport coordinates.
+             *
+             * Both scroll positions are absolute pixel offsets, so growing the
+             * content without adjusting them slides the page towards its top
+             * left corner. These corrections keep whatever sits under [focus]
+             * where it is.
+             */
+            fun zoomAbout(scale: Float, focus: Offset) {
+                val target = (zoom * scale).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                val factor = target / zoom
+                if (factor == 1f) return
+
+                // Horizontal: content point under the focus is scrollX + focus.x.
+                val targetScrollX = (factor * (horizontalScroll.value + focus.x) - focus.x)
+                    .roundToInt()
+
+                // Vertical: LazyListState is item-relative, so anchor to the
+                // fraction of the item the focus falls in - that fraction is
+                // scale-independent.
+                val visible = listState.layoutInfo.visibleItemsInfo
+                val anchorItem = visible.firstOrNull {
+                    focus.y >= it.offset && focus.y < it.offset + it.size
+                } ?: visible.firstOrNull()
+                val verticalAnchor = anchorItem?.takeIf { it.size > 0 }?.let { item ->
+                    val fraction = ((focus.y - item.offset) / item.size).coerceIn(0f, 1f)
+                    item.index to (fraction * item.size * factor - focus.y).roundToInt()
+                }
+
+                zoom = target
+                scope.launch {
+                    // Let the list re-measure at the new width before scrolling,
+                    // otherwise the scroll clamps against stale bounds.
+                    withFrameNanos { }
+                    verticalAnchor?.let { (index, offset) ->
+                        listState.scrollToItem(index, offset.coerceAtLeast(0))
+                    }
+                    horizontalScroll.scrollTo(
+                        targetScrollX.coerceIn(0, horizontalScroll.maxValue),
+                    )
+                }
+            }
 
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    // Panning is only meaningful once pages overflow the viewport.
-                    .horizontalScroll(horizontalScroll, enabled = zoom > MIN_ZOOM)
-                    .pinchToZoom { scale ->
-                        zoom = (zoom * scale).coerceIn(MIN_ZOOM, MAX_ZOOM)
-                    },
+                    // The gesture sits outside the scrolling box so its centroid
+                    // arrives in viewport coordinates rather than content ones.
+                    .pinchToZoom(
+                        onZoom = { scale, focus ->
+                            gestureFocus = focus
+                            gestureScale = (gestureScale * scale)
+                                .coerceIn(MIN_ZOOM / zoom, MAX_ZOOM / zoom)
+                        },
+                        onEnd = {
+                            val committed = gestureScale
+                            gestureScale = 1f
+                            zoomAbout(committed, gestureFocus)
+                        },
+                    ),
             ) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.width(contentWidthDp).fillMaxHeight(),
-                    contentPadding = PaddingValues(vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        // While fingers are down the page is scaled on the GPU
+                        // instead of being re-laid out. Re-laying out per frame
+                        // and correcting the scroll a frame later made the page
+                        // tremble; this commits one layout pass on release.
+                        .graphicsLayer {
+                            if (gestureScale != 1f && size.width > 0f && size.height > 0f) {
+                                scaleX = gestureScale
+                                scaleY = gestureScale
+                                transformOrigin = TransformOrigin(
+                                    (gestureFocus.x / size.width).coerceIn(0f, 1f),
+                                    (gestureFocus.y / size.height).coerceIn(0f, 1f),
+                                )
+                            }
+                        }
+                        // Panning is only meaningful once pages overflow the viewport.
+                        .horizontalScroll(horizontalScroll, enabled = zoom > MIN_ZOOM),
                 ) {
-                    items(count = state.pageCount, key = { it }) { index ->
-                        // Falls back to the document's shape until this page is
-                        // measured, so the list does not reflow while scrolling.
-                        val aspectRatio = viewModel.pageSizes[index]?.aspectRatio()
-                            ?: state.defaultAspectRatio
-                        PageView(
-                            pageNumber = index,
-                            renderWidth = contentWidth,
-                            aspectRatio = aspectRatio,
-                            viewModel = viewModel,
-                        )
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.width(contentWidthDp).fillMaxHeight(),
+                        contentPadding = PaddingValues(vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        items(count = state.pageCount, key = { it }) { index ->
+                            // Falls back to the document's shape until this page
+                            // is measured, so the list does not reflow while
+                            // scrolling.
+                            val aspectRatio = viewModel.pageSizes[index]?.aspectRatio()
+                                ?: state.defaultAspectRatio
+                            PageView(
+                                pageNumber = index,
+                                renderWidth = renderWidth,
+                                aspectRatio = aspectRatio,
+                                viewModel = viewModel,
+                            )
+                        }
                     }
                 }
             }
 
+            // Buttons zoom about the middle of the viewport, so they anchor the
+            // same way a pinch does.
+            val viewportCentre = Offset(constraints.maxWidth / 2f, constraints.maxHeight / 2f)
             ZoomControls(
                 zoom = zoom,
-                onZoomIn = { zoom = (zoom * ZOOM_STEP).coerceAtMost(MAX_ZOOM) },
-                onZoomOut = { zoom = (zoom / ZOOM_STEP).coerceAtLeast(MIN_ZOOM) },
-                onReset = { zoom = MIN_ZOOM },
+                onZoomIn = { zoomAbout(ZOOM_STEP, viewportCentre) },
+                onZoomOut = { zoomAbout(1f / ZOOM_STEP, viewportCentre) },
+                onReset = { zoomAbout(MIN_ZOOM / zoom, viewportCentre) },
                 modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
             )
         }
@@ -338,10 +432,17 @@ private fun PageView(
     aspectRatio: Float,
     viewModel: ReaderViewModel,
 ) {
-    var bitmap by remember(pageNumber, renderWidth) { mutableStateOf<Bitmap?>(null) }
+    // Seeded from whatever is already in memory, and deliberately not keyed on
+    // renderWidth, so a page never blanks: zooming keeps showing the previous
+    // rendering scaled until a sharper one arrives, and an item recomposed by
+    // the list picks its bitmap straight back up.
+    var bitmap by remember(pageNumber) { mutableStateOf(viewModel.cachedPage(pageNumber)) }
 
     LaunchedEffect(pageNumber, renderWidth) {
-        bitmap = viewModel.renderPage(pageNumber, renderWidth)
+        // Re-seed in case this page was rendered while the item was away.
+        viewModel.cachedPage(pageNumber)?.let { if (bitmap == null) bitmap = it }
+        val rendered = viewModel.renderPage(pageNumber, renderWidth)
+        if (rendered != null) bitmap = rendered
     }
 
     Box(
@@ -421,24 +522,32 @@ private fun ZoomControls(
 }
 
 /**
- * Reports pinch scale changes without consuming single-pointer drags, so the
- * page list keeps scrolling vertically while pinch still zooms.
+ * Reports pinch scale changes and the point they are centred on, without
+ * consuming single-pointer drags, so the page list keeps scrolling vertically
+ * while pinch still zooms.
  */
-private fun Modifier.pinchToZoom(onZoom: (Float) -> Unit): Modifier = pointerInput(Unit) {
+private fun Modifier.pinchToZoom(
+    onZoom: (scale: Float, focus: Offset) -> Unit,
+    onEnd: () -> Unit,
+): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false)
+        var zoomed = false
         var hasPointers = true
         while (hasPointers) {
             val event = awaitPointerEvent()
             if (event.changes.size >= 2) {
                 val scale = event.calculateZoom()
-                if (scale != 1f) {
-                    onZoom(scale)
+                val focus = event.calculateCentroid()
+                if (scale != 1f && focus != Offset.Unspecified) {
+                    onZoom(scale, focus)
+                    zoomed = true
                     event.changes.forEach { it.consume() }
                 }
             }
             hasPointers = event.changes.any { it.pressed }
         }
+        if (zoomed) onEnd()
     }
 }
 

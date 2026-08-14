@@ -21,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.math.sqrt
 
 /** What the reader screen should be showing. */
@@ -82,6 +83,22 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
+    /** Most recent cache key per page, so any rendering of a page can be found. */
+    private val latestKeyByPage = ConcurrentHashMap<Int, String>()
+
+    /**
+     * Whatever rendering of [pageNumber] is already in memory, at any width, or
+     * null if the page has never been rendered.
+     *
+     * Deliberately not a suspend function: [renderPage] has to queue behind
+     * [documentLock], so waiting on it - even for a cache hit - leaves the page
+     * blank for as long as other renders are in flight. The UI calls this to
+     * show the previous rendering immediately and swap in the sharper one when
+     * it arrives.
+     */
+    fun cachedPage(pageNumber: Int): Bitmap? =
+        latestKeyByPage[pageNumber]?.let { pageCache.get(it) }
+
     private val library = LibraryStore(application)
 
     val recents: StateFlow<List<RecentDocument>> = library.recents.stateIn(
@@ -128,6 +145,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                         document?.close()
                         document = null
                         pageCache.evictAll()
+                        latestKeyByPage.clear()
                         val opened = DjvuDocument.open(local.file)
                             ?: error("DjVuLibre could not open ${local.displayName}")
                         document = opened
@@ -191,7 +209,9 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         val (size, rendered) = result
         _pageSizes[pageNumber] = size
         if (rendered != null) {
-            pageCache.put(cacheKey(pageNumber, cappedWidth(width, size)), rendered)
+            val key = cacheKey(pageNumber, cappedWidth(width, size))
+            pageCache.put(key, rendered)
+            latestKeyByPage[pageNumber] = key
         }
         return rendered
     }
