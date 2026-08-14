@@ -1,6 +1,7 @@
 package com.djvureader.app
 
 import android.app.Application
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.LruCache
@@ -12,8 +13,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -33,6 +36,10 @@ sealed interface ReaderState {
         val pageCount: Int,
         /** width / height of the first page, used to size pages not yet measured. */
         val defaultAspectRatio: Float,
+        /** Identity of the open document, used to key saved reading progress. */
+        val documentKey: String,
+        /** Page this document was last left on. */
+        val initialPage: Int,
     ) : ReaderState
 }
 
@@ -75,12 +82,42 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
     }
 
-    fun openUri(uri: Uri) = openWith { DocumentImporter.import(getApplication(), uri) }
+    private val library = LibraryStore(application)
+
+    val recents: StateFlow<List<RecentDocument>> = library.recents.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5_000),
+        initialValue = emptyList(),
+    )
+
+    fun openUri(uri: Uri) {
+        // Without a persisted grant the URI stops working once this process
+        // dies, which would leave every recent entry unopenable.
+        runCatching {
+            getApplication<Application>().contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION,
+            )
+        }
+        openWith(key = uri.toString()) { DocumentImporter.import(getApplication(), uri) }
+    }
 
     fun openBundledSample() =
-        openWith { DocumentImporter.importSample(getApplication(), SAMPLE_ASSET) }
+        openWith(key = "asset:$SAMPLE_ASSET") {
+            DocumentImporter.importSample(getApplication(), SAMPLE_ASSET)
+        }
 
-    private fun openWith(load: () -> LocalDocument) {
+    fun openRecent(recent: RecentDocument) {
+        if (recent.key.startsWith("asset:")) openBundledSample() else openUri(Uri.parse(recent.key))
+    }
+
+    /** Remembers how far through the open document the reader has got. */
+    fun saveProgress(page: Int) {
+        val loaded = _state.value as? ReaderState.Loaded ?: return
+        viewModelScope.launch { library.saveProgress(loaded.documentKey, page) }
+    }
+
+    private fun openWith(key: String, load: () -> LocalDocument) {
         openJob?.cancel()
         _state.value = ReaderState.Loading
         openJob = viewModelScope.launch {
@@ -104,10 +141,14 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                 onSuccess = { (pageCount, firstPage, name) ->
                     _pageSizes.clear()
                     firstPage?.let { _pageSizes[0] = it }
+                    val resumeAt = library.lastPage(key).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
+                    library.recordOpened(key, name)
                     _state.value = ReaderState.Loaded(
                         title = name,
                         pageCount = pageCount,
                         defaultAspectRatio = firstPage?.aspectRatio() ?: DEFAULT_ASPECT_RATIO,
+                        documentKey = key,
+                        initialPage = resumeAt,
                     )
                 },
                 onFailure = { error ->

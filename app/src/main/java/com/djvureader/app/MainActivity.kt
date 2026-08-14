@@ -9,6 +9,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateZoom
@@ -48,17 +49,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -66,6 +70,9 @@ import kotlin.math.roundToInt
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 5f
 private const val ZOOM_STEP = 1.5f
+
+/** How long the page must settle before reading progress is written. */
+private const val PROGRESS_SAVE_DELAY_MS = 600L
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -102,10 +109,15 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
     val openDocument = { picker.launch(arrayOf("*/*")) }
 
     when (val current = state) {
-        is ReaderState.Empty -> EmptyState(
-            onPick = openDocument,
-            onSample = viewModel::openBundledSample,
-        )
+        is ReaderState.Empty -> {
+            val recents by viewModel.recents.collectAsState()
+            EmptyState(
+                recents = recents,
+                onPick = openDocument,
+                onSample = viewModel::openBundledSample,
+                onOpenRecent = viewModel::openRecent,
+            )
+        }
 
         is ReaderState.Loading -> Centered { CircularProgressIndicator() }
 
@@ -130,16 +142,56 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
 }
 
 @Composable
-private fun EmptyState(onPick: () -> Unit, onSample: () -> Unit) {
-    Centered {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("No document open", style = MaterialTheme.typography.titleMedium)
-            Button(onClick = onPick) { Text("Open document…") }
-            TextButton(onClick = onSample) { Text("Open bundled sample") }
+private fun EmptyState(
+    recents: List<RecentDocument>,
+    onPick: () -> Unit,
+    onSample: () -> Unit,
+    onOpenRecent: (RecentDocument) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text("No document open", style = MaterialTheme.typography.titleMedium)
+        Button(onClick = onPick, modifier = Modifier.padding(top = 8.dp)) {
+            Text("Open document…")
         }
+        TextButton(onClick = onSample) { Text("Open bundled sample") }
+
+        if (recents.isNotEmpty()) {
+            Text(
+                text = "Recent",
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 4.dp),
+            )
+            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
+                items(count = recents.size, key = { recents[it].key }) { index ->
+                    val document = recents[index]
+                    RecentRow(document = document, onClick = { onOpenRecent(document) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentRow(document: RecentDocument, onClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+    ) {
+        Text(
+            text = document.displayName,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 1,
+        )
+        Text(
+            text = "Page ${document.lastPage + 1}",
+            style = MaterialTheme.typography.labelSmall,
+        )
     }
 }
 
@@ -156,6 +208,21 @@ private fun DocumentReader(
     // The topmost visible item is the page the reader considers themselves on.
     val currentPage by remember {
         derivedStateOf { listState.firstVisibleItemIndex + 1 }
+    }
+
+    // Resume where this document was left, then keep saving as it is read.
+    // Both live in one effect so the restore completes before the first save,
+    // otherwise the initial position would overwrite the stored page with 0.
+    LaunchedEffect(state.documentKey) {
+        if (state.initialPage > 0) {
+            listState.scrollToItem(state.initialPage)
+        }
+        snapshotFlow { listState.firstVisibleItemIndex }
+            .distinctUntilChanged()
+            .collectLatest { page ->
+                delay(PROGRESS_SAVE_DELAY_MS)
+                viewModel.saveProgress(page)
+            }
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
@@ -309,8 +376,7 @@ private fun JumpToPageDialog(
     onJump: (Int) -> Unit,
 ) {
     var text by remember { mutableStateOf("") }
-    val page = text.toIntOrNull()
-    val valid = page != null && page in 1..pageCount
+    val page = text.toIntOrNull()?.takeIf { it in 1..pageCount }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -324,7 +390,7 @@ private fun JumpToPageDialog(
             )
         },
         confirmButton = {
-            TextButton(onClick = { if (valid) onJump(page!!) }, enabled = valid) {
+            TextButton(onClick = { page?.let(onJump) }, enabled = page != null) {
                 Text("Go")
             }
         },
