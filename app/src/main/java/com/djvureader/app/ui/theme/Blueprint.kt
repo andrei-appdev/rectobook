@@ -16,8 +16,24 @@ import androidx.compose.ui.unit.dp
  * The marks are drawn outside the layout bounds, so the element needs room
  * around it - give surrounding layouts a little padding or the arms clip.
  */
+enum class BlueprintCorner {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+    ;
+
+    companion object {
+        val All: Set<BlueprintCorner> = entries.toSet()
+
+        /** What the design's bottom sheet marks: its two top corners only. */
+        val Top: Set<BlueprintCorner> = setOf(TopLeft, TopRight)
+    }
+}
+
 fun Modifier.blueprintCorners(
     color: Color = onSurfaceAlpha(0.55f),
+    corners: Set<BlueprintCorner> = BlueprintCorner.All,
     armLength: Dp = 11.dp,
     overhang: Dp = 6.dp,
     thickness: Dp = 1.dp,
@@ -53,8 +69,8 @@ fun Modifier.blueprintCorners(
         )
     }
 
-    mark(0f, 0f, 1, 1)
-    mark(w, 0f, -1, 1)
-    mark(0f, h, 1, -1)
-    mark(w, h, -1, -1)
+    if (BlueprintCorner.TopLeft in corners) mark(0f, 0f, 1, 1)
+    if (BlueprintCorner.TopRight in corners) mark(w, 0f, -1, 1)
+    if (BlueprintCorner.BottomLeft in corners) mark(0f, h, 1, -1)
+    if (BlueprintCorner.BottomRight in corners) mark(w, h, -1, -1)
 }

@@ -31,14 +31,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,7 +51,6 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -70,7 +66,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.djvureader.app.ui.theme.DjvuTheme
 import com.djvureader.app.ui.theme.IndustryNeutral200
-import com.djvureader.app.ui.theme.IndustryNeutral900
 import com.djvureader.app.ui.theme.TabularNums
 import com.djvureader.app.ui.theme.onSurfaceAlpha
 import kotlinx.coroutines.delay
@@ -92,6 +87,12 @@ private const val ZOOM_SETTLE_DELAY_MS = 150L
 
 /** How long the zoom readout lingers after a step, matching the design's 700ms. */
 private const val ZOOM_FLASH_MS = 700L
+
+/**
+ * Gap between pages. Narrow enough that the backdrop reads as a rule between
+ * two sheets rather than as a gutter they float in.
+ */
+private val PAGE_GAP = 2.dp
 
 /** The design's `transition: transform .22s cubic-bezier(.3,.7,.2,1)`. */
 private const val CHROME_SLIDE_MS = 220
@@ -172,7 +173,7 @@ private fun DocumentReader(
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
-    var showJumpDialog by remember { mutableStateOf(false) }
+    var showGoToSheet by remember { mutableStateOf(false) }
 
     // The design's chrome is transient: it starts visible and a tap on the page
     // takes it away, so a document can be read edge to edge.
@@ -343,7 +344,7 @@ private fun DocumentReader(
                     // Pages run under the bars, which are translucent, so the
                     // list reserves their height rather than being inset by it.
                     contentPadding = PaddingValues(top = 60.dp, bottom = 66.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(PAGE_GAP),
                 ) {
                     items(count = state.pageCount, key = { it }) { index ->
                         // Falls back to the document's shape until this page
@@ -381,7 +382,7 @@ private fun DocumentReader(
             canZoomOut = zoom > MIN_ZOOM,
             canZoomIn = zoom < MAX_ZOOM,
             hidden = chromeHidden,
-            onGoToPage = { showJumpDialog = true },
+            onGoToPage = { showGoToSheet = true },
             onZoomOut = { zoomAbout(1f / ZOOM_STEP, viewportCentre) },
             onZoomIn = { zoomAbout(ZOOM_STEP, viewportCentre) },
             onZoomReset = { zoomAbout(MIN_ZOOM / zoom, viewportCentre) },
@@ -393,12 +394,12 @@ private fun DocumentReader(
         }
     }
 
-    if (showJumpDialog) {
-        JumpToPageDialog(
+    if (showGoToSheet) {
+        GoToPageSheet(
             pageCount = state.pageCount,
-            onDismiss = { showJumpDialog = false },
+            onDismiss = { showGoToSheet = false },
             onJump = { page ->
-                showJumpDialog = false
+                showGoToSheet = false
                 scope.launch { listState.scrollToItem(page - 1) }
             },
         )
@@ -433,15 +434,10 @@ private fun PageView(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
-            // `box-shadow: var(--shadow-sm)` plus the hairline edge the design
-            // gives every sheet, so pages separate from the backdrop even where
-            // the scan itself is white to the margin.
-            .shadow(
-                elevation = 1.dp,
-                clip = false,
-                ambientColor = IndustryNeutral900,
-                spotColor = IndustryNeutral900,
-            )
+            // The design's `box-shadow: var(--shadow-sm)` is dropped: at this
+            // gap it only smears into the rule between pages. The hairline edge
+            // does the separating, so a scan that is white to its margin still
+            // ends visibly.
             .background(Color.White)
             .border(1.dp, onSurfaceAlpha(0.14f)),
         contentAlignment = Alignment.Center,
@@ -463,35 +459,6 @@ private fun PageView(
             )
         }
     }
-}
-
-@Composable
-private fun JumpToPageDialog(
-    pageCount: Int,
-    onDismiss: () -> Unit,
-    onJump: (Int) -> Unit,
-) {
-    var text by remember { mutableStateOf("") }
-    val page = text.toIntOrNull()?.takeIf { it in 1..pageCount }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Go to page") },
-        text = {
-            OutlinedTextField(
-                value = text,
-                onValueChange = { text = it.filter(Char::isDigit).take(6) },
-                singleLine = true,
-                label = { Text("1 – $pageCount") },
-            )
-        },
-        confirmButton = {
-            TextButton(onClick = { page?.let(onJump) }, enabled = page != null) {
-                Text("Go")
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
 }
 
 /**

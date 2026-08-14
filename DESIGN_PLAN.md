@@ -44,9 +44,18 @@ Top: back, title, `djvu · N pp`, search, thumbnails. Bottom: page button,
 progress line, segmented −/`100%`/+, plus the centre zoom flash. A reskin of
 the controls only; the zoom and scroll mechanics stay as they are.
 
-**4. Go-to-page sheet** — bottom sheet instead of the `AlertDialog`. The quick
+**4. Go-to-page sheet** ✅ — bottom sheet instead of the `AlertDialog`. The quick
 marks (Cover, Contents, Ch. 4…) are a document outline, which is not extracted
 yet: either drop them or add `ddjvu_document_get_outline` in the same pass.
+
+*Built without the outline.* `ddjvu_document_get_outline` returns entries as
+`(name url subs…)`, and the url may name a page (`#chapter1.djvu`) rather than
+number it (`#12`). Resolving a name needs `DjVuDocument::url_to_page`, which is
+C++ and not in the ddjvu C API, so a JNI pass would resolve only some entries
+and silently drop the rest. The row instead carries the jumps we do know —
+`1 First` and `N Last` — in the design's own mark styling. Real outline
+support is worth its own step alongside search, which needs C++-level access
+too.
 
 **5. Thumbnail grid** — 3 columns, current page ringed in accent. Reuses
 `renderPage` at small width but needs its own cache bucket; sharing the page
@@ -68,7 +77,7 @@ term. The largest item, and best done after 1–5.
 - **Light theme only**, matching the design, rather than deriving a dark
   variant.
 
-## Departures in what is built (steps 1–3)
+## Departures in what is built (steps 1–4)
 
 - **`Open bundled sample`** sits under `OPEN FILE`. Not in the design, but it
   is the only path that does not need the system picker, so it stays until the
@@ -87,3 +96,7 @@ term. The largest item, and best done after 1–5.
 - **Registration marks are crosses, not brackets.** `.corner::before/after`
   span the full 11px box and cross at 5px, so each arm sticks out on both
   sides of the corner.
+- **The sheet's corner marks are drawn inside it.** The design offsets them
+  -6px on a panel that is already full width, so on a real screen both marks
+  would fall off the edges; `blueprintCorners(overhang = 0.dp)` puts them just
+  inside instead.
