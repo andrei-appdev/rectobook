@@ -1,5 +1,8 @@
 package com.djvureader.app
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -37,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -60,9 +64,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.djvureader.app.ui.theme.DjvuTheme
 import com.djvureader.app.ui.theme.IndustryNeutral200
@@ -101,6 +109,18 @@ private val ChromeEasing = CubicBezierEasing(0.3f, 0.7f, 0.2f, 1f)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Draw behind the system bars on every version. API 35 enforces this
+        // anyway; asking for it explicitly means older devices hide and reveal
+        // the bars the same way rather than resizing the window underneath us.
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            // The design is light throughout, so the clock and the navigation
+            // icons have to be dark to be seen against it.
+            isAppearanceLightStatusBars = true
+            isAppearanceLightNavigationBars = true
+        }
+
         // A document may arrive from another app via ACTION_VIEW.
         val initialUri: Uri? = intent?.data
         setContent {
@@ -183,6 +203,10 @@ private fun DocumentReader(
         animationSpec = tween(CHROME_SLIDE_MS, easing = ChromeEasing),
         label = "chrome",
     )
+
+    // The system bars go with the reader's own, so one tap clears everything
+    // off the page.
+    SystemBars(visible = chromeVisible)
 
     // The topmost visible item is the page the reader considers themselves on.
     val currentPage by remember {
@@ -459,6 +483,47 @@ private fun PageView(
             )
         }
     }
+}
+
+/**
+ * Shows or hides the status and navigation bars.
+ *
+ * `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` keeps the bars reachable while they
+ * are hidden: a swipe from an edge brings them back for a moment, so the clock
+ * and the back gesture are never stranded behind a document.
+ *
+ * The bars are always restored when this leaves composition - a reader that
+ * ate the system bars and did not give them back on the way out would follow
+ * the user to the library screen.
+ */
+@Composable
+private fun SystemBars(visible: Boolean) {
+    val view = LocalView.current
+    if (view.isInEditMode) return
+    val window = view.context.findActivity()?.window ?: return
+
+    LaunchedEffect(visible) {
+        WindowCompat.getInsetsController(window, view).apply {
+            systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            if (visible) show(WindowInsetsCompat.Type.systemBars())
+            else hide(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            WindowCompat.getInsetsController(window, view)
+                .show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+}
+
+/** The activity behind a composable's context, however it is wrapped. */
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 /**
