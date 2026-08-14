@@ -19,7 +19,17 @@ data class RecentDocument(
     val displayName: String,
     val lastPage: Int,
     val lastOpenedAt: Long,
-)
+    /** 0 when recorded by an older build that did not store it. */
+    val pageCount: Int = 0,
+    val sizeBytes: Long = 0,
+) {
+    /** How far through the document we are, 0f..1f. */
+    val progress: Float
+        get() = if (pageCount > 1) (lastPage.toFloat() / (pageCount - 1)).coerceIn(0f, 1f) else 0f
+
+    val isFinished: Boolean
+        get() = pageCount > 0 && lastPage >= pageCount - 1
+}
 
 private val Context.libraryDataStore: DataStore<Preferences> by
     preferencesDataStore(name = "library")
@@ -39,7 +49,12 @@ class LibraryStore(private val context: Context) {
         }
 
     /** Records a document as most recently opened, preserving its saved page. */
-    suspend fun recordOpened(key: String, displayName: String) {
+    suspend fun recordOpened(
+        key: String,
+        displayName: String,
+        pageCount: Int,
+        sizeBytes: Long,
+    ) {
         context.libraryDataStore.edit { preferences ->
             val existing = decode(preferences[RECENTS_KEY])
             val previous = existing.firstOrNull { it.key == key }
@@ -48,6 +63,8 @@ class LibraryStore(private val context: Context) {
                 displayName = displayName,
                 lastPage = previous?.lastPage ?: 0,
                 lastOpenedAt = System.currentTimeMillis(),
+                pageCount = pageCount,
+                sizeBytes = sizeBytes,
             )
             val updated = (listOf(entry) + existing.filterNot { it.key == key }).take(MAX_RECENTS)
             preferences[RECENTS_KEY] = encode(updated)
@@ -78,6 +95,8 @@ class LibraryStore(private val context: Context) {
                     displayName = item.optString("name"),
                     lastPage = item.optInt("page"),
                     lastOpenedAt = item.optLong("opened"),
+                    pageCount = item.optInt("pages"),
+                    sizeBytes = item.optLong("bytes"),
                 )
             }
         }.getOrDefault(emptyList())
@@ -91,7 +110,9 @@ class LibraryStore(private val context: Context) {
                     .put("key", entry.key)
                     .put("name", entry.displayName)
                     .put("page", entry.lastPage)
-                    .put("opened", entry.lastOpenedAt),
+                    .put("opened", entry.lastOpenedAt)
+                    .put("pages", entry.pageCount)
+                    .put("bytes", entry.sizeBytes),
             )
         }
         return array.toString()

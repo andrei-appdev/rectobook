@@ -44,6 +44,14 @@ sealed interface ReaderState {
     ) : ReaderState
 }
 
+/** What opening a document yielded, before it becomes [ReaderState.Loaded]. */
+private data class OpenedDocument(
+    val pageCount: Int,
+    val firstPageSize: PageSize?,
+    val displayName: String,
+    val sizeBytes: Long,
+)
+
 /**
  * Owns the open [DjvuDocument] across configuration changes and closes it in
  * [onCleared] - the native handle is not garbage collected.
@@ -128,6 +136,26 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         if (recent.key.startsWith("asset:")) openBundledSample() else openUri(Uri.parse(recent.key))
     }
 
+    /**
+     * Closes the open document and returns to the library. The native handle is
+     * released under [documentLock] so a render still in flight finishes first.
+     */
+    fun closeDocument() {
+        openJob?.cancel()
+        val closing = document
+        document = null
+        title = ""
+        _pageSizes.clear()
+        _state.value = ReaderState.Empty
+        viewModelScope.launch(Dispatchers.IO) {
+            documentLock.withLock {
+                closing?.close()
+                pageCache.evictAll()
+                latestKeyByPage.clear()
+            }
+        }
+    }
+
     /** Remembers how far through the open document the reader has got. */
     fun saveProgress(page: Int) {
         val loaded = _state.value as? ReaderState.Loaded ?: return
@@ -151,20 +179,32 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                         document = opened
                         title = local.displayName
                         val firstPage = opened.pageSize(0)
-                        Triple(opened.pageCount, firstPage, local.displayName)
+                        OpenedDocument(
+                            pageCount = opened.pageCount,
+                            firstPageSize = firstPage,
+                            displayName = local.displayName,
+                            sizeBytes = local.file.length(),
+                        )
                     }
                 }
             }
             result.fold(
-                onSuccess = { (pageCount, firstPage, name) ->
+                onSuccess = { opened ->
                     _pageSizes.clear()
-                    firstPage?.let { _pageSizes[0] = it }
-                    val resumeAt = library.lastPage(key).coerceIn(0, (pageCount - 1).coerceAtLeast(0))
-                    library.recordOpened(key, name)
+                    opened.firstPageSize?.let { _pageSizes[0] = it }
+                    val lastIndex = (opened.pageCount - 1).coerceAtLeast(0)
+                    val resumeAt = library.lastPage(key).coerceIn(0, lastIndex)
+                    library.recordOpened(
+                        key = key,
+                        displayName = opened.displayName,
+                        pageCount = opened.pageCount,
+                        sizeBytes = opened.sizeBytes,
+                    )
                     _state.value = ReaderState.Loaded(
-                        title = name,
-                        pageCount = pageCount,
-                        defaultAspectRatio = firstPage?.aspectRatio() ?: DEFAULT_ASPECT_RATIO,
+                        title = opened.displayName,
+                        pageCount = opened.pageCount,
+                        defaultAspectRatio = opened.firstPageSize?.aspectRatio()
+                            ?: DEFAULT_ASPECT_RATIO,
                         documentKey = key,
                         initialPage = resumeAt,
                     )

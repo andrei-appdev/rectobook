@@ -6,9 +6,12 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
@@ -16,10 +19,8 @@ import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,7 +31,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -45,6 +45,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -53,6 +54,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
@@ -60,10 +62,17 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.djvureader.app.ui.theme.DjvuTheme
+import com.djvureader.app.ui.theme.IndustryNeutral200
+import com.djvureader.app.ui.theme.IndustryNeutral900
+import com.djvureader.app.ui.theme.TabularNums
+import com.djvureader.app.ui.theme.onSurfaceAlpha
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -81,13 +90,20 @@ private const val PROGRESS_SAVE_DELAY_MS = 600L
 /** How long zoom must settle before pages are re-rendered at the new scale. */
 private const val ZOOM_SETTLE_DELAY_MS = 150L
 
+/** How long the zoom readout lingers after a step, matching the design's 700ms. */
+private const val ZOOM_FLASH_MS = 700L
+
+/** The design's `transition: transform .22s cubic-bezier(.3,.7,.2,1)`. */
+private const val CHROME_SLIDE_MS = 220
+private val ChromeEasing = CubicBezierEasing(0.3f, 0.7f, 0.2f, 1f)
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // A document may arrive from another app via ACTION_VIEW.
         val initialUri: Uri? = intent?.data
         setContent {
-            MaterialTheme {
+            DjvuTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     // Keep the bar and page list clear of the status and
                     // navigation bars.
@@ -118,7 +134,7 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
     when (val current = state) {
         is ReaderState.Empty -> {
             val recents by viewModel.recents.collectAsState()
-            EmptyState(
+            LibraryScreen(
                 recents = recents,
                 onPick = openDocument,
                 onSample = viewModel::openBundledSample,
@@ -143,61 +159,7 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
         is ReaderState.Loaded -> DocumentReader(
             state = current,
             viewModel = viewModel,
-            onPick = openDocument,
-        )
-    }
-}
-
-@Composable
-private fun EmptyState(
-    recents: List<RecentDocument>,
-    onPick: () -> Unit,
-    onSample: () -> Unit,
-    onOpenRecent: (RecentDocument) -> Unit,
-) {
-    Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-    ) {
-        Text("No document open", style = MaterialTheme.typography.titleMedium)
-        Button(onClick = onPick, modifier = Modifier.padding(top = 8.dp)) {
-            Text("Open document…")
-        }
-        TextButton(onClick = onSample) { Text("Open bundled sample") }
-
-        if (recents.isNotEmpty()) {
-            Text(
-                text = "Recent",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 4.dp),
-            )
-            LazyColumn(modifier = Modifier.fillMaxWidth().weight(1f, fill = false)) {
-                items(count = recents.size, key = { recents[it].key }) { index ->
-                    val document = recents[index]
-                    RecentRow(document = document, onClick = { onOpenRecent(document) })
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun RecentRow(document: RecentDocument, onClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-    ) {
-        Text(
-            text = document.displayName,
-            style = MaterialTheme.typography.bodyLarge,
-            maxLines = 1,
-        )
-        Text(
-            text = "Page ${document.lastPage + 1}",
-            style = MaterialTheme.typography.labelSmall,
+            onBack = viewModel::closeDocument,
         )
     }
 }
@@ -206,11 +168,20 @@ private fun RecentRow(document: RecentDocument, onClick: () -> Unit) {
 private fun DocumentReader(
     state: ReaderState.Loaded,
     viewModel: ReaderViewModel,
-    onPick: () -> Unit,
+    onBack: () -> Unit,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var showJumpDialog by remember { mutableStateOf(false) }
+
+    // The design's chrome is transient: it starts visible and a tap on the page
+    // takes it away, so a document can be read edge to edge.
+    var chromeVisible by remember { mutableStateOf(true) }
+    val chromeHidden by animateFloatAsState(
+        targetValue = if (chromeVisible) 0f else 1f,
+        animationSpec = tween(CHROME_SLIDE_MS, easing = ChromeEasing),
+        label = "chrome",
+    )
 
     // The topmost visible item is the page the reader considers themselves on.
     val currentPage by remember {
@@ -232,153 +203,193 @@ private fun DocumentReader(
             }
     }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        ReaderBar(
-            title = state.title,
-            currentPage = currentPage,
-            pageCount = state.pageCount,
-            onPick = onPick,
-            onJump = { showJumpDialog = true },
-        )
+    // Zooming widens the content rather than scaling the list: pages are
+    // re-rendered at the new width, so they stay sharp and the list keeps
+    // correct scroll extents.
+    var zoom by remember { mutableFloatStateOf(MIN_ZOOM) }
+    // Pages lay out at `zoom` immediately but are re-rendered only at
+    // `renderZoom`. A pinch changes zoom every frame, and re-rendering on
+    // each one would cancel the previous decode over and over.
+    var renderZoom by remember { mutableFloatStateOf(MIN_ZOOM) }
+    // Live pinch state: scale applied on the GPU until the fingers lift.
+    var gestureScale by remember { mutableFloatStateOf(1f) }
+    var gestureFocus by remember { mutableStateOf(Offset.Zero) }
+    val horizontalScroll = rememberScrollState()
+    var viewport by remember { mutableStateOf(IntSize.Zero) }
 
-        // Zooming widens the content rather than scaling the list: pages are
-        // re-rendered at the new width, so they stay sharp and the list keeps
-        // correct scroll extents.
-        var zoom by remember { mutableFloatStateOf(MIN_ZOOM) }
-        // Pages lay out at `zoom` immediately but are re-rendered only at
-        // `renderZoom`. A pinch changes zoom every frame, and re-rendering on
-        // each one would cancel the previous decode over and over.
-        var renderZoom by remember { mutableFloatStateOf(MIN_ZOOM) }
-        // Live pinch state: scale applied on the GPU until the fingers lift.
-        var gestureScale by remember { mutableFloatStateOf(1f) }
-        var gestureFocus by remember { mutableStateOf(Offset.Zero) }
-        val horizontalScroll = rememberScrollState()
+    LaunchedEffect(zoom) {
+        if (zoom == MIN_ZOOM) horizontalScroll.scrollTo(0)
+        delay(ZOOM_SETTLE_DELAY_MS)
+        renderZoom = zoom
+    }
 
-        LaunchedEffect(zoom) {
-            if (zoom == MIN_ZOOM) horizontalScroll.scrollTo(0)
-            delay(ZOOM_SETTLE_DELAY_MS)
-            renderZoom = zoom
+    // The design flashes the scale over the middle of the page as it changes:
+    // live while the fingers are down, then lingering briefly after a step.
+    var zoomFlashes by remember { mutableIntStateOf(0) }
+    var flashLingering by remember { mutableStateOf(false) }
+    LaunchedEffect(zoomFlashes) {
+        if (zoomFlashes == 0) return@LaunchedEffect
+        flashLingering = true
+        delay(ZOOM_FLASH_MS)
+        flashLingering = false
+    }
+
+    val contentWidthDp = with(LocalDensity.current) { (viewport.width * zoom).toInt().toDp() }
+    val renderWidth = (viewport.width * renderZoom).toInt()
+
+    /**
+     * Zooms by [scale] about [focus], given in viewport coordinates.
+     *
+     * Both scroll positions are absolute pixel offsets, so growing the content
+     * without adjusting them slides the page towards its top left corner. These
+     * corrections keep whatever sits under [focus] where it is.
+     */
+    fun zoomAbout(scale: Float, focus: Offset) {
+        val target = (zoom * scale).coerceIn(MIN_ZOOM, MAX_ZOOM)
+        val factor = target / zoom
+        if (factor == 1f) return
+
+        // Horizontal: content point under the focus is scrollX + focus.x.
+        val targetScrollX = (factor * (horizontalScroll.value + focus.x) - focus.x)
+            .roundToInt()
+
+        // Vertical: LazyListState is item-relative, so anchor to the fraction of
+        // the item the focus falls in - that fraction is scale-independent.
+        val visible = listState.layoutInfo.visibleItemsInfo
+        val anchorItem = visible.firstOrNull {
+            focus.y >= it.offset && focus.y < it.offset + it.size
+        } ?: visible.firstOrNull()
+        val verticalAnchor = anchorItem?.takeIf { it.size > 0 }?.let { item ->
+            val fraction = ((focus.y - item.offset) / item.size).coerceIn(0f, 1f)
+            item.index to (fraction * item.size * factor - focus.y).roundToInt()
         }
 
-        BoxWithConstraints(modifier = Modifier.weight(1f)) {
-            val contentWidth = (constraints.maxWidth * zoom).toInt()
-            val renderWidth = (constraints.maxWidth * renderZoom).toInt()
-            val contentWidthDp = with(LocalDensity.current) { contentWidth.toDp() }
-
-            /**
-             * Zooms by [scale] about [focus], given in viewport coordinates.
-             *
-             * Both scroll positions are absolute pixel offsets, so growing the
-             * content without adjusting them slides the page towards its top
-             * left corner. These corrections keep whatever sits under [focus]
-             * where it is.
-             */
-            fun zoomAbout(scale: Float, focus: Offset) {
-                val target = (zoom * scale).coerceIn(MIN_ZOOM, MAX_ZOOM)
-                val factor = target / zoom
-                if (factor == 1f) return
-
-                // Horizontal: content point under the focus is scrollX + focus.x.
-                val targetScrollX = (factor * (horizontalScroll.value + focus.x) - focus.x)
-                    .roundToInt()
-
-                // Vertical: LazyListState is item-relative, so anchor to the
-                // fraction of the item the focus falls in - that fraction is
-                // scale-independent.
-                val visible = listState.layoutInfo.visibleItemsInfo
-                val anchorItem = visible.firstOrNull {
-                    focus.y >= it.offset && focus.y < it.offset + it.size
-                } ?: visible.firstOrNull()
-                val verticalAnchor = anchorItem?.takeIf { it.size > 0 }?.let { item ->
-                    val fraction = ((focus.y - item.offset) / item.size).coerceIn(0f, 1f)
-                    item.index to (fraction * item.size * factor - focus.y).roundToInt()
-                }
-
-                zoom = target
-                scope.launch {
-                    // Let the list re-measure at the new width before scrolling,
-                    // otherwise the scroll clamps against stale bounds.
-                    withFrameNanos { }
-                    verticalAnchor?.let { (index, offset) ->
-                        listState.scrollToItem(index, offset.coerceAtLeast(0))
-                    }
-                    horizontalScroll.scrollTo(
-                        targetScrollX.coerceIn(0, horizontalScroll.maxValue),
-                    )
-                }
+        zoom = target
+        zoomFlashes++
+        scope.launch {
+            // Let the list re-measure at the new width before scrolling,
+            // otherwise the scroll clamps against stale bounds.
+            withFrameNanos { }
+            verticalAnchor?.let { (index, offset) ->
+                listState.scrollToItem(index, offset.coerceAtLeast(0))
             }
+            horizontalScroll.scrollTo(
+                targetScrollX.coerceIn(0, horizontalScroll.maxValue),
+            )
+        }
+    }
 
+    // Buttons zoom about the middle of the viewport, so they anchor the same
+    // way a pinch does.
+    val viewportCentre = Offset(viewport.width / 2f, viewport.height / 2f)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                // The design lays the pages on a tone darker than the app
+                // background, so a white page reads as paper on a desk.
+                .background(IndustryNeutral200)
+                .onSizeChanged { viewport = it }
+                // The gesture sits outside the scrolling box so its centroid
+                // arrives in viewport coordinates rather than content ones.
+                .pinchToZoom(
+                    onZoom = { scale, focus ->
+                        gestureFocus = focus
+                        gestureScale = (gestureScale * scale)
+                            .coerceIn(MIN_ZOOM / zoom, MAX_ZOOM / zoom)
+                    },
+                    onEnd = {
+                        val committed = gestureScale
+                        gestureScale = 1f
+                        zoomAbout(committed, gestureFocus)
+                    },
+                    onTap = { chromeVisible = !chromeVisible },
+                ),
+        ) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    // The gesture sits outside the scrolling box so its centroid
-                    // arrives in viewport coordinates rather than content ones.
-                    .pinchToZoom(
-                        onZoom = { scale, focus ->
-                            gestureFocus = focus
-                            gestureScale = (gestureScale * scale)
-                                .coerceIn(MIN_ZOOM / zoom, MAX_ZOOM / zoom)
-                        },
-                        onEnd = {
-                            val committed = gestureScale
-                            gestureScale = 1f
-                            zoomAbout(committed, gestureFocus)
-                        },
-                    ),
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        // While fingers are down the page is scaled on the GPU
-                        // instead of being re-laid out. Re-laying out per frame
-                        // and correcting the scroll a frame later made the page
-                        // tremble; this commits one layout pass on release.
-                        .graphicsLayer {
-                            if (gestureScale != 1f && size.width > 0f && size.height > 0f) {
-                                scaleX = gestureScale
-                                scaleY = gestureScale
-                                transformOrigin = TransformOrigin(
-                                    (gestureFocus.x / size.width).coerceIn(0f, 1f),
-                                    (gestureFocus.y / size.height).coerceIn(0f, 1f),
-                                )
-                            }
-                        }
-                        // Panning is only meaningful once pages overflow the viewport.
-                        .horizontalScroll(horizontalScroll, enabled = zoom > MIN_ZOOM),
-                ) {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.width(contentWidthDp).fillMaxHeight(),
-                        contentPadding = PaddingValues(vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        items(count = state.pageCount, key = { it }) { index ->
-                            // Falls back to the document's shape until this page
-                            // is measured, so the list does not reflow while
-                            // scrolling.
-                            val aspectRatio = viewModel.pageSizes[index]?.aspectRatio()
-                                ?: state.defaultAspectRatio
-                            PageView(
-                                pageNumber = index,
-                                renderWidth = renderWidth,
-                                aspectRatio = aspectRatio,
-                                viewModel = viewModel,
+                    // While fingers are down the page is scaled on the GPU
+                    // instead of being re-laid out. Re-laying out per frame
+                    // and correcting the scroll a frame later made the page
+                    // tremble; this commits one layout pass on release.
+                    .graphicsLayer {
+                        if (gestureScale != 1f && size.width > 0f && size.height > 0f) {
+                            scaleX = gestureScale
+                            scaleY = gestureScale
+                            transformOrigin = TransformOrigin(
+                                (gestureFocus.x / size.width).coerceIn(0f, 1f),
+                                (gestureFocus.y / size.height).coerceIn(0f, 1f),
                             )
                         }
                     }
+                    // Panning is only meaningful once pages overflow the viewport.
+                    .horizontalScroll(horizontalScroll, enabled = zoom > MIN_ZOOM),
+            ) {
+                LazyColumn(
+                    state = listState,
+                    // Until the viewport is measured the content width is
+                    // unknown; pinning it to 0 would give every page zero
+                    // height and the list would compose the whole document at
+                    // once. Zoom starts at fit-width, so the full width is the
+                    // right first guess.
+                    modifier = Modifier
+                        .then(
+                            if (viewport.width > 0) Modifier.width(contentWidthDp)
+                            else Modifier.fillMaxWidth(),
+                        )
+                        .fillMaxHeight(),
+                    // Pages run under the bars, which are translucent, so the
+                    // list reserves their height rather than being inset by it.
+                    contentPadding = PaddingValues(top = 60.dp, bottom = 66.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    items(count = state.pageCount, key = { it }) { index ->
+                        // Falls back to the document's shape until this page
+                        // is measured, so the list does not reflow while
+                        // scrolling.
+                        val aspectRatio = viewModel.pageSizes[index]?.aspectRatio()
+                            ?: state.defaultAspectRatio
+                        PageView(
+                            pageNumber = index,
+                            renderWidth = renderWidth,
+                            aspectRatio = aspectRatio,
+                            viewModel = viewModel,
+                        )
+                    }
                 }
             }
+        }
 
-            // Buttons zoom about the middle of the viewport, so they anchor the
-            // same way a pinch does.
-            val viewportCentre = Offset(constraints.maxWidth / 2f, constraints.maxHeight / 2f)
-            ZoomControls(
-                zoom = zoom,
-                onZoomIn = { zoomAbout(ZOOM_STEP, viewportCentre) },
-                onZoomOut = { zoomAbout(1f / ZOOM_STEP, viewportCentre) },
-                onReset = { zoomAbout(MIN_ZOOM / zoom, viewportCentre) },
-                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
-            )
+        // Live during a pinch, so the readout tracks the fingers rather than
+        // jumping when they lift.
+        val zoomLabel = "${(zoom * gestureScale * 100).roundToInt()}%"
+
+        ReaderTopBar(
+            title = state.title,
+            pageCount = state.pageCount,
+            hidden = chromeHidden,
+            onBack = onBack,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+
+        ReaderBottomBar(
+            currentPage = currentPage,
+            pageCount = state.pageCount,
+            zoomLabel = zoomLabel,
+            canZoomOut = zoom > MIN_ZOOM,
+            canZoomIn = zoom < MAX_ZOOM,
+            hidden = chromeHidden,
+            onGoToPage = { showJumpDialog = true },
+            onZoomOut = { zoomAbout(1f / ZOOM_STEP, viewportCentre) },
+            onZoomIn = { zoomAbout(ZOOM_STEP, viewportCentre) },
+            onZoomReset = { zoomAbout(MIN_ZOOM / zoom, viewportCentre) },
+            modifier = Modifier.align(Alignment.BottomCenter),
+        )
+
+        if (flashLingering || gestureScale != 1f) {
+            ZoomFlash(zoomLabel = zoomLabel, modifier = Modifier.align(Alignment.Center))
         }
     }
 
@@ -391,33 +402,6 @@ private fun DocumentReader(
                 scope.launch { listState.scrollToItem(page - 1) }
             },
         )
-    }
-}
-
-@Composable
-private fun ReaderBar(
-    title: String,
-    currentPage: Int,
-    pageCount: Int,
-    onPick: () -> Unit,
-    onJump: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(horizontal = 12.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.titleSmall, maxLines = 1)
-            Text(
-                text = "Page $currentPage of $pageCount",
-                style = MaterialTheme.typography.labelSmall,
-            )
-        }
-        TextButton(onClick = onJump) { Text("Go to…") }
-        TextButton(onClick = onPick) { Text("Open") }
     }
 }
 
@@ -449,15 +433,26 @@ private fun PageView(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
-            .background(Color.White),
+            // `box-shadow: var(--shadow-sm)` plus the hairline edge the design
+            // gives every sheet, so pages separate from the backdrop even where
+            // the scan itself is white to the margin.
+            .shadow(
+                elevation = 1.dp,
+                clip = false,
+                ambientColor = IndustryNeutral900,
+                spotColor = IndustryNeutral900,
+            )
+            .background(Color.White)
+            .border(1.dp, onSurfaceAlpha(0.14f)),
         contentAlignment = Alignment.Center,
     ) {
         val current = bitmap
         if (current == null) {
             Text(
                 text = "${pageNumber + 1}",
-                style = MaterialTheme.typography.labelMedium,
-                color = Color.Gray,
+                style = MaterialTheme.typography.labelMedium
+                    .copy(fontFeatureSettings = TabularNums),
+                color = onSurfaceAlpha(0.45f),
             )
         } else {
             Image(
@@ -499,44 +494,31 @@ private fun JumpToPageDialog(
     )
 }
 
-@Composable
-private fun ZoomControls(
-    zoom: Float,
-    onZoomIn: () -> Unit,
-    onZoomOut: () -> Unit,
-    onReset: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        shadowElevation = 3.dp,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onZoomOut, enabled = zoom > MIN_ZOOM) { Text("−") }
-            TextButton(onClick = onReset) { Text("${(zoom * 100).roundToInt()}%") }
-            TextButton(onClick = onZoomIn, enabled = zoom < MAX_ZOOM) { Text("+") }
-        }
-    }
-}
-
 /**
  * Reports pinch scale changes and the point they are centred on, without
  * consuming single-pointer drags, so the page list keeps scrolling vertically
- * while pinch still zooms.
+ * while pinch still zooms. A press that neither zooms nor travels is reported
+ * as a tap, which is how the design toggles the chrome.
+ *
+ * The tap is recognised here rather than in a second `pointerInput` so that a
+ * pinch, or a scroll that happens to end where it began, cannot also read as
+ * one.
  */
 private fun Modifier.pinchToZoom(
     onZoom: (scale: Float, focus: Offset) -> Unit,
     onEnd: () -> Unit,
+    onTap: () -> Unit,
 ): Modifier = pointerInput(Unit) {
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false)
         var zoomed = false
+        var multiTouch = false
+        var travel = 0f
         var hasPointers = true
         while (hasPointers) {
             val event = awaitPointerEvent()
             if (event.changes.size >= 2) {
+                multiTouch = true
                 val scale = event.calculateZoom()
                 val focus = event.calculateCentroid()
                 if (scale != 1f && focus != Offset.Unspecified) {
@@ -544,10 +526,15 @@ private fun Modifier.pinchToZoom(
                     zoomed = true
                     event.changes.forEach { it.consume() }
                 }
+            } else {
+                event.changes.forEach { travel += (it.position - it.previousPosition).getDistance() }
             }
             hasPointers = event.changes.any { it.pressed }
         }
-        if (zoomed) onEnd()
+        when {
+            zoomed -> onEnd()
+            !multiTouch && travel < viewConfiguration.touchSlop -> onTap()
+        }
     }
 }
 
