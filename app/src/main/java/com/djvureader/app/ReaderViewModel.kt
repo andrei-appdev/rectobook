@@ -18,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.math.sqrt
 
 /** What the reader screen should be showing. */
 sealed interface ReaderState {
@@ -117,31 +118,51 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Renders [pageNumber] at [width] pixels wide, preserving its aspect ratio.
-     * Cancelling the caller (scrolling the page off screen) abandons the result.
+     * Renders [pageNumber] at up to [width] pixels wide, preserving its aspect
+     * ratio. Cancelling the caller (scrolling the page off screen) abandons the
+     * result.
+     *
+     * The width is capped so a single page cannot exceed [MAX_RENDER_PIXELS];
+     * at high zoom the caller displays the result upscaled rather than the app
+     * allocating an unbounded bitmap.
      */
     suspend fun renderPage(pageNumber: Int, width: Int): Bitmap? {
         if (width <= 0) return null
-        val key = cacheKey(pageNumber, width)
-        pageCache.get(key)?.let { return it }
 
-        val bitmap = withContext(Dispatchers.IO) {
+        // Fast path: geometry already known, so the capped width is too.
+        _pageSizes[pageNumber]?.let { known ->
+            pageCache.get(cacheKey(pageNumber, cappedWidth(width, known)))?.let { return it }
+        }
+
+        val result = withContext(Dispatchers.IO) {
             documentLock.withLock {
                 val doc = document ?: return@withLock null
                 val size = doc.pageSize(pageNumber) ?: return@withLock null
-                val height = (width.toLong() * size.height / size.width)
+                val renderWidth = cappedWidth(width, size)
+                pageCache.get(cacheKey(pageNumber, renderWidth))?.let { return@withLock size to it }
+                val height = (renderWidth.toLong() * size.height / size.width)
                     .toInt()
                     .coerceAtLeast(1)
-                size to doc.renderPage(pageNumber, width, height)
+                size to doc.renderPage(pageNumber, renderWidth, height)
             }
         } ?: return null
 
-        val (size, rendered) = bitmap
+        val (size, rendered) = result
         _pageSizes[pageNumber] = size
         if (rendered != null) {
-            pageCache.put(key, rendered)
+            pageCache.put(cacheKey(pageNumber, cappedWidth(width, size)), rendered)
         }
         return rendered
+    }
+
+    /**
+     * Largest width whose rendered page stays within [MAX_RENDER_PIXELS].
+     * Given height = width / aspect, area = width^2 / aspect.
+     */
+    private fun cappedWidth(requested: Int, size: PageSize): Int {
+        val aspect = size.aspectRatio()
+        val limit = sqrt(MAX_RENDER_PIXELS.toDouble() * aspect).toInt()
+        return requested.coerceAtMost(limit).coerceAtLeast(1)
     }
 
     override fun onCleared() {
@@ -164,6 +185,14 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
 
         /** Fallback shape (roughly A4 portrait) for pages not yet measured. */
         private const val DEFAULT_ASPECT_RATIO = 0.72f
+
+        /**
+         * Ceiling on a single rendered page, about 24 MB at ARGB_8888. Without
+         * it, zooming a 400dpi scan would ask for bitmaps of hundreds of
+         * megabytes. Region rendering (see DjvuDocument.renderRegion) is the
+         * real fix and would let this go away.
+         */
+        private const val MAX_RENDER_PIXELS = 6_000_000
 
         /**
          * A page rendered to a phone's width runs to several megabytes, so the

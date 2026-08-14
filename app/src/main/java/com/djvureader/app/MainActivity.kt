@@ -9,6 +9,10 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -16,12 +20,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -35,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -43,12 +52,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
+
+/** Zoom is expressed as a multiple of fit-to-width. */
+private const val MIN_ZOOM = 1f
+private const val MAX_ZOOM = 5f
+private const val ZOOM_STEP = 1.5f
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -150,29 +167,57 @@ private fun DocumentReader(
             onJump = { showJumpDialog = true },
         )
 
-        BoxWithConstraints(modifier = Modifier.weight(1f)) {
-            // Pages render at the width they are displayed at.
-            val renderWidth = constraints.maxWidth
+        // Zooming widens the content rather than scaling the list: pages are
+        // re-rendered at the new width, so they stay sharp and the list keeps
+        // correct scroll extents.
+        var zoom by remember { mutableFloatStateOf(MIN_ZOOM) }
+        val horizontalScroll = rememberScrollState()
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+        LaunchedEffect(zoom) {
+            if (zoom == MIN_ZOOM) horizontalScroll.scrollTo(0)
+        }
+
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val contentWidth = (constraints.maxWidth * zoom).toInt()
+            val contentWidthDp = with(LocalDensity.current) { contentWidth.toDp() }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    // Panning is only meaningful once pages overflow the viewport.
+                    .horizontalScroll(horizontalScroll, enabled = zoom > MIN_ZOOM)
+                    .pinchToZoom { scale ->
+                        zoom = (zoom * scale).coerceIn(MIN_ZOOM, MAX_ZOOM)
+                    },
             ) {
-                items(count = state.pageCount, key = { it }) { index ->
-                    // Falls back to the document's shape until this page is
-                    // measured, so the list does not reflow while scrolling.
-                    val aspectRatio = viewModel.pageSizes[index]?.aspectRatio()
-                        ?: state.defaultAspectRatio
-                    PageView(
-                        pageNumber = index,
-                        renderWidth = renderWidth,
-                        aspectRatio = aspectRatio,
-                        viewModel = viewModel,
-                    )
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.width(contentWidthDp).fillMaxHeight(),
+                    contentPadding = PaddingValues(vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(count = state.pageCount, key = { it }) { index ->
+                        // Falls back to the document's shape until this page is
+                        // measured, so the list does not reflow while scrolling.
+                        val aspectRatio = viewModel.pageSizes[index]?.aspectRatio()
+                            ?: state.defaultAspectRatio
+                        PageView(
+                            pageNumber = index,
+                            renderWidth = contentWidth,
+                            aspectRatio = aspectRatio,
+                            viewModel = viewModel,
+                        )
+                    }
                 }
             }
+
+            ZoomControls(
+                zoom = zoom,
+                onZoomIn = { zoom = (zoom * ZOOM_STEP).coerceAtMost(MAX_ZOOM) },
+                onZoomOut = { zoom = (zoom / ZOOM_STEP).coerceAtLeast(MIN_ZOOM) },
+                onReset = { zoom = MIN_ZOOM },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(16.dp),
+            )
         }
     }
 
@@ -285,6 +330,50 @@ private fun JumpToPageDialog(
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
+}
+
+@Composable
+private fun ZoomControls(
+    zoom: Float,
+    onZoomIn: () -> Unit,
+    onZoomOut: () -> Unit,
+    onReset: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shadowElevation = 3.dp,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onZoomOut, enabled = zoom > MIN_ZOOM) { Text("−") }
+            TextButton(onClick = onReset) { Text("${(zoom * 100).roundToInt()}%") }
+            TextButton(onClick = onZoomIn, enabled = zoom < MAX_ZOOM) { Text("+") }
+        }
+    }
+}
+
+/**
+ * Reports pinch scale changes without consuming single-pointer drags, so the
+ * page list keeps scrolling vertically while pinch still zooms.
+ */
+private fun Modifier.pinchToZoom(onZoom: (Float) -> Unit): Modifier = pointerInput(Unit) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false)
+        var hasPointers = true
+        while (hasPointers) {
+            val event = awaitPointerEvent()
+            if (event.changes.size >= 2) {
+                val scale = event.calculateZoom()
+                if (scale != 1f) {
+                    onZoom(scale)
+                    event.changes.forEach { it.consume() }
+                }
+            }
+            hasPointers = event.changes.any { it.pressed }
+        }
+    }
 }
 
 @Composable
