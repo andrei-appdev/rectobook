@@ -8,10 +8,6 @@
 - menu with settings, about and other options?
 
 ## Bugs
-- Reading position restores short on first open. The card says `P.17`, the reader
-  opens at `12 / 57`; rotating the device corrects it to `17 / 57`. `scrollToItem`
-  runs before any page has been measured, so it counts every item at the
-  document's default aspect ratio and stops short. Reproduced on the emulator.
 - Page counter reads `56 / 57` at the true end of the document. `currentPage` is
   `firstVisibleItemIndex + 1`, and at the bottom of the list the topmost visible
   page is the second-to-last one.

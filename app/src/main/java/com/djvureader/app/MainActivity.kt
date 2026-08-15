@@ -80,6 +80,7 @@ import com.djvureader.app.ui.theme.onSurfaceAlpha
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -228,6 +229,10 @@ private fun DocumentReader(
     // otherwise the initial position would overwrite the stored page with 0.
     LaunchedEffect(state.documentKey) {
         if (state.initialPage > 0) {
+            // Not before the list has been laid out. A scroll against a list
+            // with no measured pages is clamped to whatever its content height
+            // is at the time, and lands short.
+            snapshotFlow { listState.layoutInfo.viewportSize.height }.first { it > 0 }
             listState.scrollToItem(state.initialPage)
         }
         snapshotFlow { listState.firstVisibleItemIndex }
@@ -369,36 +374,41 @@ private fun DocumentReader(
                     // Panning is only meaningful once pages overflow the viewport.
                     .horizontalScroll(horizontalScroll, enabled = zoom > MIN_ZOOM),
             ) {
-                LazyColumn(
-                    state = listState,
-                    // Until the viewport is measured the content width is
-                    // unknown; pinning it to 0 would give every page zero
-                    // height and the list would compose the whole document at
-                    // once. Zoom starts at fit-width, so the full width is the
-                    // right first guess.
-                    modifier = Modifier
-                        .then(
-                            if (viewport.width > 0) Modifier.width(contentWidthDp)
-                            else Modifier.fillMaxWidth(),
-                        )
-                        .fillMaxHeight(),
-                    // Pages run under the bars, which are translucent, so the
-                    // list reserves their height rather than being inset by it.
-                    contentPadding = PaddingValues(top = 60.dp, bottom = 66.dp),
-                    verticalArrangement = Arrangement.spacedBy(PAGE_GAP),
-                ) {
-                    items(count = state.pageCount, key = { it }) { index ->
-                        // Falls back to the document's shape until this page
-                        // is measured, so the list does not reflow while
-                        // scrolling.
-                        val aspectRatio = viewModel.pageSizes[index]?.aspectRatio()
-                            ?: state.defaultAspectRatio
-                        PageView(
-                            pageNumber = index,
-                            renderWidth = renderWidth,
-                            aspectRatio = aspectRatio,
-                            viewModel = viewModel,
-                        )
+                // Nothing is laid out until the viewport has been measured.
+                //
+                // There is no width to fall back on in the meantime: this list
+                // sits inside a horizontal scroller, which measures its child
+                // against unbounded width, so `fillMaxWidth` has nothing to
+                // fill and the list collapses to its minimum intrinsic width -
+                // about 32px. At that width every page is a 35px sliver, the
+                // whole document fits one screen, and a restored reading
+                // position is clamped to the top. Composing a frame later
+                // costs nothing; opening on the wrong page does not.
+                if (viewport.width > 0) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .width(contentWidthDp)
+                            .fillMaxHeight(),
+                        // Pages run under the bars, which are translucent, so
+                        // the list reserves their height rather than being
+                        // inset by it.
+                        contentPadding = PaddingValues(top = 60.dp, bottom = 66.dp),
+                        verticalArrangement = Arrangement.spacedBy(PAGE_GAP),
+                    ) {
+                        items(count = state.pageCount, key = { it }) { index ->
+                            // Falls back to the document's shape until this
+                            // page is measured, so the list does not reflow
+                            // while scrolling.
+                            val aspectRatio = viewModel.pageSizes[index]?.aspectRatio()
+                                ?: state.defaultAspectRatio
+                            PageView(
+                                pageNumber = index,
+                                renderWidth = renderWidth,
+                                aspectRatio = aspectRatio,
+                                viewModel = viewModel,
+                            )
+                        }
                     }
                 }
             }
