@@ -54,7 +54,7 @@ private data class OpenedDocument(
 )
 
 /**
- * Owns the open [DjvuDocument] across configuration changes and closes it in
+ * Owns the open [PagedDocument] across configuration changes and closes it in
  * [onCleared] - the native handle is not garbage collected.
  *
  * All document access is serialised through [documentLock], because DjVuLibre
@@ -75,7 +75,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     val pageSizes: Map<Int, PageSize> get() = _pageSizes
 
     private val documentLock = Mutex()
-    private var document: DjvuDocument? = null
+    private var document: PagedDocument? = null
     private var title: String = ""
     private var openJob: Job? = null
 
@@ -205,8 +205,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                         document = null
                         pageCache.evictAll()
                         latestKeyByPage.clear()
-                        val opened = DjvuDocument.open(local.file)
-                            ?: error("DjVuLibre could not open ${local.displayName}")
+                        val opened = openDocument(local.file)
                         document = opened
                         title = local.displayName
                         val firstPage = opened.pageSize(0)

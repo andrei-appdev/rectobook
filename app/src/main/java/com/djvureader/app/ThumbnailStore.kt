@@ -28,9 +28,9 @@ internal val RecentDocument.thumbnailKey: String
  * decoding a shelf of scans on every visit would cost far more than the picture
  * is worth. Cached files are only rewritten when a document changes size.
  *
- * Renders are serialised. They open a second [DjvuDocument] alongside whatever
- * the reader has open - each document owns its own DjVuLibre context, so that
- * is safe - but decoding is memory-hungry, and several at once on a library of
+ * Renders are serialised. They open a second [PagedDocument] alongside whatever
+ * the reader has open - each document owns its own decoder state, so that is
+ * safe - but decoding is memory-hungry, and several at once on a library of
  * large scans is not worth the parallelism.
  */
 class ThumbnailStore(private val context: Context) {
@@ -62,7 +62,11 @@ class ThumbnailStore(private val context: Context) {
 
     private fun render(document: RecentDocument, width: Int, height: Int): Bitmap? {
         val source = sourceFile(document) ?: return null
-        return DjvuDocument.open(source)?.use { it.renderPageToFit(0, width, height) }
+        // A library entry we cannot open is not worth reporting: the card keeps
+        // its drawn glyph, and the reader will say why if it is tapped.
+        return runCatching {
+            openDocument(source).use { it.renderPageToFit(0, width, height) }
+        }.getOrNull()
     }
 
     /**
