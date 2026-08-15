@@ -12,6 +12,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -168,10 +169,12 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun closeDocument() {
         openJob?.cancel()
+        clearSearch()
         val closing = document
         document = null
         title = ""
         _pageSizes.clear()
+        pageTextCache.clear()
         _state.value = ReaderState.Empty
         viewModelScope.launch(Dispatchers.IO) {
             documentLock.withLock {
@@ -190,6 +193,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun openWith(key: String, load: () -> LocalDocument) {
         openJob?.cancel()
+        clearSearch()
+        pageTextCache.clear()
         _state.value = ReaderState.Loading
         openJob = viewModelScope.launch {
             val result = runCatching {
@@ -240,6 +245,91 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                 },
             )
         }
+    }
+
+    private val _search = MutableStateFlow(SearchResults())
+    val search: StateFlow<SearchResults> = _search.asStateFlow()
+
+    private var searchJob: Job? = null
+
+    /**
+     * Page text already extracted, so a second search does not decode the
+     * document again. Cleared with the document, since it belongs to it.
+     */
+    private val pageTextCache = ConcurrentHashMap<Int, String>()
+
+    /**
+     * Searches the open document for [query], publishing hits to [search] as
+     * they are found rather than at the end - a long scan takes seconds, and
+     * the first hits are usually the ones wanted.
+     *
+     * Each call cancels the one before it, so typing produces one search rather
+     * than one per keystroke; the leading delay is what makes that a debounce.
+     */
+    fun search(query: String) {
+        searchJob?.cancel()
+        val trimmed = query.trim()
+        val loaded = _state.value as? ReaderState.Loaded
+        if (loaded == null || trimmed.length < MIN_QUERY_LENGTH) {
+            _search.value = SearchResults(query = trimmed)
+            return
+        }
+
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            val hits = mutableListOf<SearchHit>()
+            var hasText = false
+            var truncated = false
+
+            fun publish(scanned: Int, running: Boolean) {
+                _search.value = SearchResults(
+                    query = trimmed,
+                    hits = hits.toList(),
+                    scannedPages = scanned,
+                    pageCount = loaded.pageCount,
+                    running = running,
+                    hasTextLayer = hasText,
+                    truncated = truncated,
+                )
+            }
+            publish(scanned = 0, running = true)
+
+            for (page in 0 until loaded.pageCount) {
+                val text = pageText(page) ?: ""
+                if (text.isNotBlank()) hasText = true
+                hits += findHits(text, trimmed, page, limit = MAX_HITS - hits.size)
+                if (hits.size >= MAX_HITS) {
+                    truncated = true
+                    publish(scanned = page + 1, running = false)
+                    return@launch
+                }
+                publish(scanned = page + 1, running = true)
+            }
+            publish(scanned = loaded.pageCount, running = false)
+        }
+    }
+
+    /** Drops the current search and stops any scan still running. */
+    fun clearSearch() {
+        searchJob?.cancel()
+        searchJob = null
+        _search.value = SearchResults()
+    }
+
+    /**
+     * A page's hidden text, from the cache when possible.
+     *
+     * Held under [documentLock] like every other document call, but taken per
+     * page rather than for the whole search, so a scan does not stop the pages
+     * behind it from rendering.
+     */
+    private suspend fun pageText(pageNumber: Int): String? {
+        pageTextCache[pageNumber]?.let { return it }
+        val text = withContext(Dispatchers.IO) {
+            documentLock.withLock { document?.pageText(pageNumber) }
+        }
+        if (text != null) pageTextCache[pageNumber] = text
+        return text
     }
 
     /**
@@ -312,6 +402,12 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
 
         /** Fallback shape (roughly A4 portrait) for pages not yet measured. */
         private const val DEFAULT_ASPECT_RATIO = 0.72f
+
+        /**
+         * How long typing must pause before a search starts. Long enough that
+         * a word typed at speed scans once, short enough not to feel held back.
+         */
+        private const val SEARCH_DEBOUNCE_MS = 250L
 
         /**
          * Ceiling on a single rendered page, about 24 MB at ARGB_8888. Without

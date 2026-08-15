@@ -1,7 +1,6 @@
 # TODO
 
 ## Tasks
-- search functionality
 - add app versioning
 - support of pdf files
 

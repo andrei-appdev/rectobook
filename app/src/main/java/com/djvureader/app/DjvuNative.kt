@@ -27,6 +27,14 @@ internal object DjvuNative {
     external fun nativeGetPageInfo(handle: Long, pageNumber: Int): IntArray?
 
     /**
+     * UTF-8 bytes of a page's hidden text layer, empty if the page has none,
+     * or null if it could not be read. Bytes rather than a String because the
+     * JNI string call expects Java's modified UTF-8, which OCR output is under
+     * no obligation to be.
+     */
+    external fun nativeGetPageText(handle: Long, pageNumber: Int): ByteArray?
+
+    /**
      * Renders part of [pageNumber] into [bitmap], which must be ARGB_8888.
      *
      * The page is scaled to [pageWidth] x [pageHeight]; the region of that

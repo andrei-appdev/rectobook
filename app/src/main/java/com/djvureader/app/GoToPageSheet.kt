@@ -1,23 +1,17 @@
 package com.djvureader.app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -26,7 +20,6 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,24 +27,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.djvureader.app.ui.theme.BodyFont
 import com.djvureader.app.ui.theme.IndustryAccent
 import com.djvureader.app.ui.theme.IndustryBackground
-import com.djvureader.app.ui.theme.IndustryDivider
 import com.djvureader.app.ui.theme.IndustryNeutral900
-import com.djvureader.app.ui.theme.IndustrySurface
-import com.djvureader.app.ui.theme.IndustryText
-import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.onSurfaceAlpha
 import kotlinx.coroutines.launch
 
 /**
@@ -107,71 +90,27 @@ fun GoToPageSheet(
                     .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 22.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                PageNumberField(
-                    text = text,
-                    onTextChange = { text = it },
-                    onSubmit = { page?.let(::jumpTo) },
+                IndustryTextField(
+                    value = text,
+                    onValueChange = { text = it.filter(Char::isDigit).take(6) },
+                    placeholder = "Page number",
                     modifier = Modifier.weight(1f),
+                    height = 44.dp,
+                    fontSize = 17.sp,
+                    tabularNums = true,
+                    // The sheet exists only to take a number, so it opens ready
+                    // for one.
+                    autoFocus = true,
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number,
+                        imeAction = ImeAction.Go,
+                    ),
+                    keyboardActions = KeyboardActions(onGo = { page?.let(::jumpTo) }),
                 )
                 JumpButton(enabled = page != null, onClick = { page?.let(::jumpTo) })
             }
         }
     }
-}
-
-/** The design's `.input`, which Material's own text fields cannot be talked into. */
-@Composable
-private fun PageNumberField(
-    text: String,
-    onTextChange: (String) -> Unit,
-    onSubmit: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val focusRequester = remember { FocusRequester() }
-    val interactionSource = remember { MutableInteractionSource() }
-    val focused by interactionSource.collectIsFocusedAsState()
-
-    // The sheet exists only to take a number, so it opens ready for one.
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-
-    BasicTextField(
-        value = text,
-        onValueChange = { onTextChange(it.filter(Char::isDigit).take(6)) },
-        singleLine = true,
-        textStyle = TextStyle(
-            fontFamily = BodyFont,
-            fontSize = 17.sp,
-            color = IndustryText,
-            fontFeatureSettings = TabularNums,
-        ),
-        cursorBrush = SolidColor(IndustryAccent),
-        interactionSource = interactionSource,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Number,
-            imeAction = ImeAction.Go,
-        ),
-        keyboardActions = KeyboardActions(onGo = { onSubmit() }),
-        modifier = modifier.height(44.dp).focusRequester(focusRequester),
-        decorationBox = { field ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(IndustrySurface)
-                    .border(1.dp, if (focused) IndustryAccent else IndustryDivider)
-                    .padding(horizontal = 10.dp),
-                contentAlignment = Alignment.CenterStart,
-            ) {
-                if (text.isEmpty()) {
-                    Text(
-                        text = "Page number",
-                        style = TextStyle(fontFamily = BodyFont, fontSize = 17.sp),
-                        color = onSurfaceAlpha(0.4f),
-                    )
-                }
-                field()
-            }
-        },
-    )
 }
 
 @Composable

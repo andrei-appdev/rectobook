@@ -28,6 +28,18 @@ class DjvuDocument private constructor(private var handle: Long) : Closeable {
     }
 
     /**
+     * The page's hidden text layer, or null if it could not be read.
+     *
+     * Empty when the page carries no text. DjVu scans usually have a text layer
+     * from OCR, but nothing requires one, and a document made from images alone
+     * returns empty for every page.
+     */
+    fun pageText(pageNumber: Int): String? {
+        checkOpen()
+        return DjvuNative.nativeGetPageText(handle, pageNumber)?.toString(Charsets.UTF_8)
+    }
+
+    /**
      * Renders [pageNumber] scaled to [width] x [height]. Returns null if the
      * page could not be decoded.
      */

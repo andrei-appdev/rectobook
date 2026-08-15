@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -196,6 +197,9 @@ private fun DocumentReader(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var showGoToSheet by remember { mutableStateOf(false) }
+    var showSearch by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val searchResults by viewModel.search.collectAsState()
 
     // The design's chrome is transient: it starts visible and a tap on the page
     // takes it away, so a document can be read edge to edge.
@@ -207,8 +211,12 @@ private fun DocumentReader(
     )
 
     // The system bars go with the reader's own, so one tap clears everything
-    // off the page.
-    SystemBars(visible = chromeVisible)
+    // off the page. Search is a screen in its own right rather than a page to
+    // read, so it always gets them back.
+    SystemBars(visible = chromeVisible || showSearch)
+
+    // Back closes search before it closes the document.
+    BackHandler(enabled = showSearch) { showSearch = false }
 
     // The topmost visible item is the page the reader considers themselves on.
     val currentPage by remember {
@@ -405,6 +413,7 @@ private fun DocumentReader(
             pageCount = state.pageCount,
             hidden = chromeHidden,
             onBack = onBack,
+            onSearch = { showSearch = true },
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
@@ -425,6 +434,27 @@ private fun DocumentReader(
 
         if (flashLingering || gestureScale != 1f) {
             ZoomFlash(zoomLabel = zoomLabel, modifier = Modifier.align(Alignment.Center))
+        }
+
+        // Covers the reader rather than sitting beside it, as the design draws
+        // it - the page is still there underneath when search is dismissed.
+        if (showSearch) {
+            SearchScreen(
+                query = query,
+                results = searchResults,
+                onQueryChange = {
+                    query = it
+                    viewModel.search(it)
+                },
+                onClose = { showSearch = false },
+                onOpenHit = { hit ->
+                    showSearch = false
+                    // The chrome comes back with the page, so the reader can
+                    // see which page they landed on.
+                    chromeVisible = true
+                    goToPage(hit.page + 1)
+                },
+            )
         }
     }
 

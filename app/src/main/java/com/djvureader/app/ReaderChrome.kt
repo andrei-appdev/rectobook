@@ -95,6 +95,12 @@ internal val PagesIcon: Icon24 = { u ->
     moveTo(16 * u, 4 * u); lineTo(14 * u, 20 * u)
 }
 
+/** A 6.5-unit lens with its handle running out to (20.5, 20.5). */
+internal val SearchIcon: Icon24 = { u ->
+    addOval(Rect(4.5f * u, 4.5f * u, 17.5f * u, 17.5f * u))
+    moveTo(16 * u, 16 * u); lineTo(20.5f * u, 20.5f * u)
+}
+
 internal val MinusIcon: Icon24 = { u ->
     moveTo(5 * u, 12 * u); lineTo(19 * u, 12 * u)
 }
@@ -124,7 +130,7 @@ internal fun StrokeIcon(
 
 /** The design's `.btn-icon`: a 36dp square with no border of its own. */
 @Composable
-private fun IconAction(
+internal fun IconAction(
     icon: Icon24,
     label: String,
     onClick: () -> Unit,
@@ -146,8 +152,7 @@ private fun IconAction(
 private const val HIDDEN_SHIFT = 1.02f
 
 /**
- * Reader top bar: back to the library, the document's identity, and room for
- * the search action that arrives with a later step.
+ * Reader top bar: back to the library, the document's identity, and search.
  *
  * [hidden] runs 0..1 and is animated by the caller, so the bar slides rather
  * than appearing.
@@ -158,6 +163,7 @@ fun ReaderTopBar(
     pageCount: Int,
     hidden: Float,
     onBack: () -> Unit,
+    onSearch: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -188,6 +194,7 @@ fun ReaderTopBar(
                     color = onSurfaceAlpha(0.45f),
                 )
             }
+            IconAction(SearchIcon, "Search in document", onSearch)
         }
         Hairline()
     }

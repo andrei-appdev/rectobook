@@ -64,9 +64,18 @@ support belongs with search, which needs C++-level access too.
 where the decorative progress line used to be. Seeks live, as the design's
 range input does.
 
-**6. Search** *(not a reskin)* — new JNI over `ddjvu_document_get_pagetext`,
-walking the miniexp text tree per page, then the hit list with the highlighted
-term. The largest item, and the only one left.
+**6. Search** ✅ *(not a reskin)* — `nativeGetPageText` over
+`ddjvu_document_get_pagetext`, walking the miniexp tree per page, then the hit
+list with the highlighted term.
+
+*Words are joined here, not by ddjvu.* Asking for the text at `page`
+granularity returns one pre-joined string in which some words run together —
+`DjVu is an image` came back as `DjVuisanimage` — so the JNI asks for `word`
+detail and puts the spaces in itself.
+
+*The scan streams.* Hits are published as pages are read rather than at the
+end, so the first ones are usable while a long document is still being walked.
+Extracted text is cached per page, so a second search does not decode it again.
 
 **~~Thumbnail grid~~** — *dropped from the design.* It was a 3-column grid with
 the current page ringed in accent; it was never built, and the screen and its
@@ -100,8 +109,16 @@ top-bar button are both gone from the mockup.
 - **`scanned 600 dpi`** is missing from the card meta line. DPI is available
   from `pageSize()` but is not stored per document, so printing it would mean
   opening every recent entry to list them.
-- **No search button** in the top bar yet; it arrives with step 6 rather than
-  sitting there dead.
+- **The search screen says more than the design draws.** The design has one
+  label, a match count. A real scan takes seconds, so the same line carries
+  progress while it runs, and says so when the document has no text layer at
+  all rather than reporting no matches. Hits are capped at 400 and the count
+  reads `400+` when the cap is reached: searching a common word in a long scan
+  matches more times than anyone scrolls.
+- **Search quality is the document's, not ours.** Hidden text comes from
+  whatever OCR made the file, and the bundled sample splits and merges words
+  (`chec k`, `levelofsupport`). Matching across those would need the text
+  normalised beyond whitespace, which is its own piece of work.
 - **The page gap is 2dp**, not the design's 16px. Asked for directly: at this
   width the backdrop reads as a rule between two sheets rather than a gutter
   they float in.

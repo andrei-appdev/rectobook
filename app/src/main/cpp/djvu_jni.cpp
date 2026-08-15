@@ -12,8 +12,10 @@
 #include <android/log.h>
 
 #include <cstring>
+#include <string>
 
 #include "djvulibre/libdjvu/ddjvuapi.h"
+#include "djvulibre/libdjvu/miniexp.h"
 
 namespace {
 
@@ -49,6 +51,36 @@ bool drainMessages(ddjvu_context_t *context, bool wait) {
         ddjvu_message_pop(context);
     }
     return ok;
+}
+
+// Appends every string in a hidden-text s-expression to `out`, separated by
+// spaces.
+//
+// djvused's text syntax nests as (word bbox "text") inside lines inside
+// paragraphs, with the bounding boxes as numbers and the text as strings, so
+// collecting the strings in order and ignoring everything else yields the
+// page's text.
+//
+// The separator is ours to choose, and has to be: asking ddjvu for the text at
+// "page" granularity returns one pre-joined string in which some words run
+// together and others do not, so "DjVu is an image" can come back as
+// "DjVuisanimage". Joining the words here instead puts exactly one space
+// between each.
+void collectText(miniexp_t exp, std::string &out) {
+    if (miniexp_stringp(exp)) {
+        const char *text = miniexp_to_str(exp);
+        if (text && *text) {
+            if (!out.empty()) {
+                out.push_back(' ');
+            }
+            out.append(text);
+        }
+        return;
+    }
+    while (miniexp_consp(exp)) {
+        collectText(miniexp_car(exp), out);
+        exp = miniexp_cdr(exp);
+    }
 }
 
 void releaseDocument(Document *doc) {
@@ -147,6 +179,48 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageInfo(JNIEnv *env, jobject, jlong
         return nullptr;
     }
     env->SetIntArrayRegion(result, 0, 3, values);
+    return result;
+}
+
+// Returns the UTF-8 bytes of a page's hidden text layer, or null if the page
+// could not be read. An empty array means the page carries no text - most DjVu
+// scans have a text layer from OCR, but nothing guarantees one.
+//
+// Bytes rather than a jstring: NewStringUTF wants Java's modified UTF-8, which
+// differs from real UTF-8 above the BMP, and this text comes from an OCR engine
+// we do not control. Kotlin decodes it properly.
+JNIEXPORT jbyteArray JNICALL
+Java_com_djvureader_app_DjvuNative_nativeGetPageText(JNIEnv *env, jobject, jlong handle,
+                                                    jint pageNumber) {
+    Document *doc = asDocument(handle);
+    if (!doc || !doc->document) {
+        return nullptr;
+    }
+
+    miniexp_t text;
+    while ((text = ddjvu_document_get_pagetext(doc->document, pageNumber, "word")) ==
+           miniexp_dummy) {
+        drainMessages(doc->context, /*wait=*/true);
+    }
+
+    std::string collected;
+    // Anything that is not a list is either the empty list (no text on this
+    // page) or one of the `failed`/`stopped` symbols. Only lists hold text, and
+    // only lists are registered with the document's garbage collector.
+    if (miniexp_consp(text)) {
+        collectText(text, collected);
+        ddjvu_miniexp_release(doc->document, text);
+    }
+
+    const auto size = static_cast<jsize>(collected.size());
+    jbyteArray result = env->NewByteArray(size);
+    if (!result) {
+        return nullptr;
+    }
+    if (size > 0) {
+        env->SetByteArrayRegion(result, 0, size,
+                                reinterpret_cast<const jbyte *>(collected.data()));
+    }
     return result;
 }
 
