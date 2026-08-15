@@ -229,7 +229,12 @@ private fun DocumentReader(
     // Both live in one effect so the restore completes before the first save,
     // otherwise the initial position would overwrite the stored page with 0.
     LaunchedEffect(state.documentKey) {
-        if (state.initialPage > 0) {
+        // Claimed rather than simply done, because this effect restarts with
+        // every new composition - including the one a rotation brings - while
+        // the page to resume at does not change. The list carries its own
+        // position across a rotation; scrolling it back to the resume point
+        // would throw away everything read since.
+        if (state.initialPage > 0 && viewModel.claimPositionRestore(state.documentKey)) {
             // Not before the list has been laid out. A scroll against a list
             // with no measured pages is clamped to whatever its content height
             // is at the time, and lands short.

@@ -187,6 +187,26 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Document whose saved position has already been restored. */
+    private var restoredKey: String? = null
+
+    /**
+     * Answers true the first time it is asked about a document, and false
+     * afterwards.
+     *
+     * Resuming belongs to opening a document, not to composing the reader.
+     * Rotating recreates the activity and everything in it, but not this - so
+     * without a claim the restore would run again on every rotation and haul
+     * the reader back to wherever they resumed, discarding what they had read
+     * since. The list keeps its own position across a configuration change, so
+     * there is nothing to redo.
+     */
+    fun claimPositionRestore(documentKey: String): Boolean {
+        if (restoredKey == documentKey) return false
+        restoredKey = documentKey
+        return true
+    }
+
     /** Remembers how far through the open document the reader has got. */
     fun saveProgress(page: Int) {
         val loaded = _state.value as? ReaderState.Loaded ?: return
@@ -197,6 +217,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         openJob?.cancel()
         clearSearch()
         pageTextCache.clear()
+        // Opening a document again - even the same one - resumes it again.
+        restoredKey = null
         _state.value = ReaderState.Loading
         openJob = viewModelScope.launch {
             val result = runCatching {
