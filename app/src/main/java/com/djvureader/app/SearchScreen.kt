@@ -50,6 +50,7 @@ import com.djvureader.app.ui.theme.onSurfaceAlpha
 fun SearchScreen(
     query: String,
     results: SearchResults,
+    textLayerLabel: String,
     onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
     onOpenHit: (SearchHit) -> Unit,
@@ -93,7 +94,7 @@ fun SearchScreen(
                 style = SectionLabel,
                 color = onSurfaceAlpha(0.55f),
             )
-            Tag(text = "OCR LAYER")
+            Tag(text = textLayerLabel)
         }
         Hairline()
 

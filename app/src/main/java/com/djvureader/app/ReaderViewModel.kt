@@ -35,6 +35,7 @@ sealed interface ReaderState {
 
     data class Loaded(
         val title: String,
+        val format: DocumentFormat,
         val pageCount: Int,
         /** width / height of the first page, used to size pages not yet measured. */
         val defaultAspectRatio: Float,
@@ -47,6 +48,7 @@ sealed interface ReaderState {
 
 /** What opening a document yielded, before it becomes [ReaderState.Loaded]. */
 private data class OpenedDocument(
+    val format: DocumentFormat,
     val pageCount: Int,
     val firstPageSize: PageSize?,
     val displayName: String,
@@ -205,11 +207,12 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                         document = null
                         pageCache.evictAll()
                         latestKeyByPage.clear()
-                        val opened = openDocument(local.file)
+                        val opened = openDocument(getApplication(), local.file)
                         document = opened
                         title = local.displayName
                         val firstPage = opened.pageSize(0)
                         OpenedDocument(
+                            format = opened.format,
                             pageCount = opened.pageCount,
                             firstPageSize = firstPage,
                             displayName = local.displayName,
@@ -232,6 +235,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                     )
                     _state.value = ReaderState.Loaded(
                         title = opened.displayName,
+                        format = opened.format,
                         pageCount = opened.pageCount,
                         defaultAspectRatio = opened.firstPageSize?.aspectRatio()
                             ?: DEFAULT_ASPECT_RATIO,

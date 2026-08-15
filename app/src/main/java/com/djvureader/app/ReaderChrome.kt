@@ -160,6 +160,7 @@ private const val HIDDEN_SHIFT = 1.02f
 @Composable
 fun ReaderTopBar(
     title: String,
+    formatLabel: String,
     pageCount: Int,
     hidden: Float,
     onBack: () -> Unit,
@@ -188,7 +189,7 @@ fun ReaderTopBar(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "DJVU · $pageCount PP",
+                    text = "$formatLabel · $pageCount PP",
                     style = MaterialTheme.typography.labelSmall
                         .copy(fontFeatureSettings = TabularNums),
                     color = onSurfaceAlpha(0.45f),

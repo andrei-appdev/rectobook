@@ -420,6 +420,7 @@ private fun DocumentReader(
 
         ReaderTopBar(
             title = state.title,
+            formatLabel = state.format.label,
             pageCount = state.pageCount,
             hidden = chromeHidden,
             onBack = onBack,
@@ -452,6 +453,7 @@ private fun DocumentReader(
             SearchScreen(
                 query = query,
                 results = searchResults,
+                textLayerLabel = state.format.textLayerLabel,
                 onQueryChange = {
                     query = it
                     viewModel.search(it)

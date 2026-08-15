@@ -24,6 +24,7 @@
                 <data android:mimeType="image/vnd.djvu" />
                 <data android:mimeType="image/x-djvu" />
                 <data android:mimeType="image/djvu" />
+                <data android:mimeType="application/pdf" />
             </intent-filter>
 
             <!-- Providers often report .djvu as a generic type, so also match
@@ -38,6 +39,7 @@
                 <data android:mimeType="*/*" />
                 <data android:pathPattern=".*\\.djvu" />
                 <data android:pathPattern=".*\\.djv" />
+                <data android:pathPattern=".*\\.pdf" />
             </intent-filter>
         </activity>
     </application>

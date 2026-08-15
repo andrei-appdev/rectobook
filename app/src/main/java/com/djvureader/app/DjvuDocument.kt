@@ -12,6 +12,8 @@ import java.io.File
  */
 class DjvuDocument private constructor(private var handle: Long) : PagedDocument {
 
+    override val format = DocumentFormat.Djvu
+
     override val pageCount: Int
         get() = if (handle == 0L) 0 else DjvuNative.nativeGetPageCount(handle)
 

@@ -1,9 +1,10 @@
 package com.djvureader.app
 
+import android.content.Context
 import android.graphics.Bitmap
 import java.io.Closeable
-import java.io.IOException
 import java.io.File
+import java.io.IOException
 
 /** Page geometry in the page's own pixel space, at its native resolution. */
 data class PageSize(val width: Int, val height: Int, val dpi: Int)
@@ -17,6 +18,9 @@ data class PageSize(val width: Int, val height: Int, val dpi: Int)
  * background dispatcher and instances must be [close]d.
  */
 interface PagedDocument : Closeable {
+
+    /** What this document turned out to be, for anything that names it. */
+    val format: DocumentFormat
 
     /** Number of pages, or 0 once closed. */
     val pageCount: Int
@@ -84,12 +88,12 @@ fun PagedDocument.renderPageToFit(pageNumber: Int, maxWidth: Int, maxHeight: Int
  * this is not a nullable return: "not a document we can read" and "a DjVu file
  * we failed on" are different things to be told.
  */
-fun openDocument(file: File): PagedDocument = when (DocumentFormat.of(file)) {
+fun openDocument(context: Context, file: File): PagedDocument = when (DocumentFormat.of(file)) {
     DocumentFormat.Djvu ->
         DjvuDocument.open(file) ?: throw IOException("This DjVu file could not be read.")
 
     DocumentFormat.Pdf ->
-        throw IOException("PDF documents are not supported yet.")
+        PdfDocument.open(context, file)
 
     null ->
         throw IOException("This is not a DjVu or PDF document.")

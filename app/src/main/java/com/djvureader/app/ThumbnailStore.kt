@@ -65,7 +65,7 @@ class ThumbnailStore(private val context: Context) {
         // A library entry we cannot open is not worth reporting: the card keeps
         // its drawn glyph, and the reader will say why if it is tapped.
         return runCatching {
-            openDocument(source).use { it.renderPageToFit(0, width, height) }
+            openDocument(context, source).use { it.renderPageToFit(0, width, height) }
         }.getOrNull()
     }
 

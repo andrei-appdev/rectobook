@@ -2,7 +2,6 @@
 
 ## Tasks
 - add app versioning
-- support of pdf files
 
 - multilanguage support?
 - menu with settings, about and other options?
@@ -11,6 +10,19 @@
 - Page counter reads `56 / 57` at the true end of the document. `currentPage` is
   `firstVisibleItemIndex + 1`, and at the bottom of the list the topmost visible
   page is the second-to-last one.
+
+## PDF, left over from the first pass
+
+- [ ] **Password-protected files** are reported and refused, not prompted for.
+      `PdfiumCore.newDocument` takes a password, so this is a dialog and a
+      retry rather than new decoding work.
+- [ ] **Page rotation is unverified.** PDFium's page width and height are
+      believed to account for `/Rotate`, but nothing tested here had a rotated
+      page. A landscape scan is the case to check.
+- [ ] **Native code is now 13.2 MB across three ABIs**, of which PDFium is
+      4.9 MB on arm64 and 3.3 MB on armeabi-v7a. A device only installs its
+      own, so this is an App Bundle / ABI-splits question rather than a real
+      per-user cost - but the project builds one universal APK today.
 
 ## Repo hygiene
 
