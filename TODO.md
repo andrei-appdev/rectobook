@@ -6,11 +6,6 @@
 - multilanguage support?
 - menu with settings, about and other options?
 
-## Bugs
-- Page counter reads `56 / 57` at the true end of the document. `currentPage` is
-  `firstVisibleItemIndex + 1`, and at the bottom of the list the topmost visible
-  page is the second-to-last one.
-
 ## PDF, left over from the first pass
 
 - [ ] **Password-protected files** are reported and refused, not prompted for.

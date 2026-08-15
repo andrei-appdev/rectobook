@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
@@ -219,9 +220,9 @@ private fun DocumentReader(
     // Back closes search before it closes the document.
     BackHandler(enabled = showSearch) { showSearch = false }
 
-    // The topmost visible item is the page the reader considers themselves on.
+    // The page the reader considers themselves on.
     val currentPage by remember {
-        derivedStateOf { listState.firstVisibleItemIndex + 1 }
+        derivedStateOf { listState.mostVisiblePage() + 1 }
     }
 
     // Resume where this document was left, then keep saving as it is read.
@@ -235,7 +236,9 @@ private fun DocumentReader(
             snapshotFlow { listState.layoutInfo.viewportSize.height }.first { it > 0 }
             listState.scrollToItem(state.initialPage)
         }
-        snapshotFlow { listState.firstVisibleItemIndex }
+        // Saved against the same page the counter shows, or the library card
+        // and the reader would disagree about where the document was left.
+        snapshotFlow { listState.mostVisiblePage() }
             .distinctUntilChanged()
             .collectLatest { page ->
                 delay(PROGRESS_SAVE_DELAY_MS)
@@ -480,6 +483,28 @@ private fun DocumentReader(
             },
         )
     }
+}
+
+/**
+ * Index of the page filling most of the viewport - which is the one being
+ * read, and not always the topmost one to intrude into it.
+ *
+ * Counting the topmost was off by one at both ends of any long scroll: at the
+ * bottom of a document the last page is what fills the screen while the one
+ * before it still clips the top edge, so a 57-page document reported 56 of 57
+ * however far down it went.
+ */
+private fun LazyListState.mostVisiblePage(): Int {
+    val info = layoutInfo
+    val visible = info.visibleItemsInfo
+    if (visible.isEmpty()) return firstVisibleItemIndex
+    return visible.maxByOrNull { page ->
+        // How much of this page is inside the viewport. Both offsets are in
+        // the same space as the items', so content padding is already in them.
+        val top = maxOf(page.offset, info.viewportStartOffset)
+        val bottom = minOf(page.offset + page.size, info.viewportEndOffset)
+        bottom - top
+    }?.index ?: firstVisibleItemIndex
 }
 
 /**
