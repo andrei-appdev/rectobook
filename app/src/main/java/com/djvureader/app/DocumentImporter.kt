@@ -23,7 +23,7 @@ object DocumentImporter {
     /** Copies [uri] into cache storage. Throws [IOException] if it cannot be read. */
     fun import(context: Context, uri: Uri): LocalDocument {
         val directory = File(context.cacheDir, IMPORT_DIR).apply { mkdirs() }
-        val target = File(directory, "${uri.toString().hashCode().absoluteValue}.djvu")
+        val target = File(directory, importedName(uri))
 
         // Always re-copy: the bytes behind a content:// URI can change, and a
         // stale cache entry would silently serve the old document.
@@ -37,6 +37,17 @@ object DocumentImporter {
         return LocalDocument(file = target, displayName = displayName(context, uri))
     }
 
+    /**
+     * The copy [import] would write for [uri], if one is already there.
+     *
+     * [import] deliberately re-copies every time, because the bytes behind a
+     * `content://` URI can change under us. Callers that only want something
+     * disposable - a thumbnail - can take the existing copy instead and skip
+     * pulling the whole document back through the provider.
+     */
+    fun cachedCopy(context: Context, uri: Uri): File? =
+        File(File(context.cacheDir, IMPORT_DIR), importedName(uri)).takeIf { it.length() > 0 }
+
     /** Copies the bundled sample out of assets, for a document that always works. */
     fun importSample(context: Context, assetName: String): LocalDocument {
         val directory = File(context.cacheDir, IMPORT_DIR).apply { mkdirs() }
@@ -48,6 +59,8 @@ object DocumentImporter {
         }
         return LocalDocument(file = target, displayName = assetName)
     }
+
+    private fun importedName(uri: Uri) = "${uri.toString().hashCode().absoluteValue}.djvu"
 
     private fun displayName(context: Context, uri: Uri): String {
         if (uri.scheme == "content") {

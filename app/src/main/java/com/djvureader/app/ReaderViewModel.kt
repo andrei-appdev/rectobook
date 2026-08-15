@@ -115,6 +115,32 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         initialValue = emptyList(),
     )
 
+    private val thumbnailStore = ThumbnailStore(application)
+    private val thumbnails = mutableStateMapOf<String, Bitmap>()
+
+    /** Whether a thumbnail has been asked for, whatever came of it. */
+    private val thumbnailsRequested = mutableSetOf<String>()
+
+    /** First page of [document], or null until one has been rendered. */
+    fun thumbnail(document: RecentDocument): Bitmap? = thumbnails[document.thumbnailKey]
+
+    /**
+     * Renders the first page of [document] at up to [width] x [height] pixels,
+     * unless that has already been asked for.
+     *
+     * A document that fails stays in [thumbnailsRequested] rather than being
+     * retried: the usual reason is that its permission has lapsed, which will
+     * not fix itself, and the card falls back to the drawn glyph.
+     */
+    fun requestThumbnail(document: RecentDocument, width: Int, height: Int) {
+        if (width <= 0 || height <= 0) return
+        val key = document.thumbnailKey
+        if (!thumbnailsRequested.add(key)) return
+        viewModelScope.launch {
+            thumbnailStore.thumbnail(document, width, height)?.let { thumbnails[key] = it }
+        }
+    }
+
     fun openUri(uri: Uri) {
         // Without a persisted grant the URI stops working once this process
         // dies, which would leave every recent entry unopenable.

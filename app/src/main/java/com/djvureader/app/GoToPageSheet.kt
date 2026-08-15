@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -40,30 +39,24 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.djvureader.app.ui.theme.Barlow
-import com.djvureader.app.ui.theme.BarlowCondensed
-import com.djvureader.app.ui.theme.BlueprintCorner
+import com.djvureader.app.ui.theme.BodyFont
 import com.djvureader.app.ui.theme.IndustryAccent
-import com.djvureader.app.ui.theme.IndustryAccent700
 import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.IndustryDivider
 import com.djvureader.app.ui.theme.IndustryNeutral900
 import com.djvureader.app.ui.theme.IndustrySurface
 import com.djvureader.app.ui.theme.IndustryText
 import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.blueprintCorners
 import com.djvureader.app.ui.theme.onSurfaceAlpha
 import kotlinx.coroutines.launch
 
 /**
- * The design's go-to-page panel: a bottom sheet carrying a numeric field, a
- * JUMP action and a row of quick marks.
+ * The design's go-to-page panel: a bottom sheet carrying a numeric field and a
+ * JUMP action, and nothing else.
  *
  * [pageCount] is the number of pages; pages are numbered from 1 here, as they
  * are everywhere the reader shows them, and [onJump] receives that 1-based
@@ -101,35 +94,19 @@ fun GoToPageSheet(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .blueprintCorners(corners = BlueprintCorner.Top, overhang = 0.dp)
                 .imePadding()
-                .navigationBarsPadding()
-                .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 22.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .navigationBarsPadding(),
         ) {
+            // The design's `.dialog` carries a hairline border. On a sheet this
+            // wide only its top edge is ever on screen, and that edge is what
+            // separates the panel from the page behind it.
+            Hairline()
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 18.dp, end = 18.dp, top = 18.dp, bottom = 22.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(
-                    text = "Go to page",
-                    style = TextStyle(
-                        fontFamily = BarlowCondensed,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 19.sp,
-                    ),
-                    modifier = Modifier.alignByBaseline(),
-                )
-                Text(
-                    text = "of $pageCount",
-                    style = MaterialTheme.typography.labelMedium
-                        .copy(fontFeatureSettings = TabularNums),
-                    color = onSurfaceAlpha(0.45f),
-                    modifier = Modifier.alignByBaseline(),
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 PageNumberField(
                     text = text,
                     onTextChange = { text = it },
@@ -137,21 +114,6 @@ fun GoToPageSheet(
                     modifier = Modifier.weight(1f),
                 )
                 JumpButton(enabled = page != null, onClick = { page?.let(::jumpTo) })
-            }
-
-            // The design fills this row from the document's outline. DjVuLibre
-            // exposes outline entries as URLs that may name a page rather than
-            // number it, and the ddjvu C API has no name-to-number lookup, so
-            // until that is resolved these are the jumps we actually know.
-            Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                QuickMark(number = 1, label = "First", onClick = { jumpTo(1) })
-                if (pageCount > 1) {
-                    QuickMark(
-                        number = pageCount,
-                        label = "Last",
-                        onClick = { jumpTo(pageCount) },
-                    )
-                }
             }
         }
     }
@@ -177,7 +139,7 @@ private fun PageNumberField(
         onValueChange = { onTextChange(it.filter(Char::isDigit).take(6)) },
         singleLine = true,
         textStyle = TextStyle(
-            fontFamily = Barlow,
+            fontFamily = BodyFont,
             fontSize = 17.sp,
             color = IndustryText,
             fontFeatureSettings = TabularNums,
@@ -202,7 +164,7 @@ private fun PageNumberField(
                 if (text.isEmpty()) {
                     Text(
                         text = "Page number",
-                        style = TextStyle(fontFamily = Barlow, fontSize = 17.sp),
+                        style = TextStyle(fontFamily = BodyFont, fontSize = 17.sp),
                         color = onSurfaceAlpha(0.4f),
                     )
                 }
@@ -227,35 +189,6 @@ private fun JumpButton(enabled: Boolean, onClick: () -> Unit) {
             text = "JUMP",
             style = MaterialTheme.typography.labelLarge,
             color = IndustryBackground.copy(alpha = alpha),
-        )
-    }
-}
-
-/** One of the design's marks: a page number in accent, then what is there. */
-@Composable
-private fun QuickMark(number: Int, label: String, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .border(1.dp, IndustryDivider)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Text(
-            text = "$number",
-            style = TextStyle(
-                fontFamily = BarlowCondensed,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 12.sp,
-                letterSpacing = 0.04.em,
-                fontFeatureSettings = TabularNums,
-            ),
-            color = IndustryAccent700,
-        )
-        Text(
-            text = label,
-            style = TextStyle(fontFamily = Barlow, fontSize = 12.sp),
-            color = onSurfaceAlpha(0.65f),
         )
     }
 }

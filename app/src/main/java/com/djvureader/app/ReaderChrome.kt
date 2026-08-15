@@ -4,6 +4,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,13 +20,25 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -31,7 +46,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.djvureader.app.ui.theme.BarlowCondensed
+import com.djvureader.app.ui.theme.HeadingFont
 import com.djvureader.app.ui.theme.IndustryAccent
 import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.IndustryDivider
@@ -39,6 +54,7 @@ import com.djvureader.app.ui.theme.IndustryNeutral900
 import com.djvureader.app.ui.theme.IndustryText
 import com.djvureader.app.ui.theme.TabularNums
 import com.djvureader.app.ui.theme.onSurfaceAlpha
+import kotlin.math.roundToInt
 
 /**
  * One of the design's icons, described in the 24-unit space of its SVG
@@ -131,7 +147,7 @@ private const val HIDDEN_SHIFT = 1.02f
 
 /**
  * Reader top bar: back to the library, the document's identity, and room for
- * the search and thumbnail actions that arrive with later steps.
+ * the search action that arrives with a later step.
  *
  * [hidden] runs 0..1 and is animated by the caller, so the bar slides rather
  * than appearing.
@@ -178,8 +194,8 @@ fun ReaderTopBar(
 }
 
 /**
- * Reader bottom bar: the page indicator, how far through the document it sits,
- * and the zoom segment.
+ * Reader bottom bar: the page indicator, a slider across the document, and the
+ * zoom segment.
  */
 @Composable
 fun ReaderBottomBar(
@@ -190,6 +206,7 @@ fun ReaderBottomBar(
     canZoomIn: Boolean,
     hidden: Float,
     onGoToPage: () -> Unit,
+    onSeekToPage: (Int) -> Unit,
     onZoomOut: () -> Unit,
     onZoomIn: () -> Unit,
     onZoomReset: () -> Unit,
@@ -228,21 +245,12 @@ fun ReaderBottomBar(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .height(2.dp)
-                    .background(onSurfaceAlpha(0.14f)),
-            ) {
-                val progress =
-                    if (pageCount > 0) currentPage.toFloat() / pageCount else 0f
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth(progress.coerceIn(0f, 1f))
-                        .height(2.dp)
-                        .background(IndustryAccent),
-                )
-            }
+            PageSlider(
+                currentPage = currentPage,
+                pageCount = pageCount,
+                onSeek = onSeekToPage,
+                modifier = Modifier.weight(1f),
+            )
 
             // `.seg`: one bordered box, its options divided by hairlines.
             Row(
@@ -261,7 +269,7 @@ fun ReaderBottomBar(
                     Text(
                         text = zoomLabel,
                         style = TextStyle(
-                            fontFamily = BarlowCondensed,
+                            fontFamily = HeadingFont,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 12.sp,
                             letterSpacing = 0.04.em,
@@ -273,6 +281,107 @@ fun ReaderBottomBar(
                 SegButton(PlusIcon, "Zoom in", enabled = canZoomIn, onClick = onZoomIn)
             }
         }
+    }
+}
+
+/** The slider's own dimensions. The row is 20dp tall, as the design's is. */
+private val TrackThickness = 2.dp
+private val ThumbWidth = 4.dp
+private val ThumbHeight = 16.dp
+
+/**
+ * The design's page slider, drawn as this system draws things rather than as
+ * the browser's `<input type="range">`: nothing here is rounded, so the handle
+ * is a caliper mark riding the same 2dp rule the library cards use for
+ * progress.
+ *
+ * Seeking is live - the design's range jumps on every input event, not on
+ * release - but the handle follows the finger rather than the list, so it
+ * cannot stutter behind pages that are still measuring.
+ */
+@Composable
+private fun PageSlider(
+    currentPage: Int,
+    pageCount: Int,
+    onSeek: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var dragPage by remember { mutableStateOf<Int?>(null) }
+    val page = (dragPage ?: currentPage).coerceIn(1, pageCount.coerceAtLeast(1))
+
+    // The handle's centre travels between its own half-widths so it never
+    // overhangs the row; page 1 sits at one end of that span, the last page at
+    // the other.
+    val fraction = if (pageCount > 1) (page - 1).toFloat() / (pageCount - 1) else 0f
+
+    Canvas(
+        modifier = modifier
+            .height(20.dp)
+            .semantics {
+                contentDescription = "Page slider"
+                progressBarRangeInfo = ProgressBarRangeInfo(
+                    current = page.toFloat(),
+                    range = 1f..pageCount.toFloat().coerceAtLeast(1f),
+                    steps = (pageCount - 2).coerceAtLeast(0),
+                )
+                setProgress { target ->
+                    onSeek(target.roundToInt().coerceIn(1, pageCount))
+                    true
+                }
+            }
+            .pointerInput(pageCount) {
+                // Page under x, where x is measured in this slider's own
+                // coordinates. Inverse of the `fraction` above.
+                fun pageAt(x: Float): Int {
+                    val span = size.width - ThumbWidth.toPx()
+                    if (span <= 0f || pageCount <= 1) return 1
+                    val f = ((x - ThumbWidth.toPx() / 2f) / span).coerceIn(0f, 1f)
+                    return (f * (pageCount - 1)).roundToInt() + 1
+                }
+
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    // Claim the press so the bar keeps it: a touch anywhere on
+                    // the track seeks there, as it does on a range input.
+                    down.consume()
+                    var target = pageAt(down.position.x)
+                    dragPage = target
+                    onSeek(target)
+
+                    horizontalDrag(down.id) { change ->
+                        change.consume()
+                        val next = pageAt(change.position.x)
+                        if (next != target) {
+                            target = next
+                            dragPage = next
+                            onSeek(next)
+                        }
+                    }
+                    dragPage = null
+                }
+            },
+    ) {
+        val track = TrackThickness.toPx()
+        val thumbW = ThumbWidth.toPx()
+        val thumbH = ThumbHeight.toPx()
+        val trackTop = (size.height - track) / 2f
+        val centre = thumbW / 2f + (size.width - thumbW) * fraction
+
+        drawRect(
+            color = onSurfaceAlpha(0.14f),
+            topLeft = Offset(0f, trackTop),
+            size = Size(size.width, track),
+        )
+        drawRect(
+            color = IndustryAccent,
+            topLeft = Offset(0f, trackTop),
+            size = Size(centre, track),
+        )
+        drawRect(
+            color = IndustryAccent,
+            topLeft = Offset(centre - thumbW / 2f, (size.height - thumbH) / 2f),
+            size = Size(thumbW, thumbH),
+        )
     }
 }
 
@@ -299,8 +408,9 @@ private fun SegDivider() {
     Box(modifier = Modifier.width(1.dp).height(30.dp).background(IndustryDivider))
 }
 
+/** The design's 1px divider, drawn as a rule across whatever it is given. */
 @Composable
-private fun Hairline() {
+internal fun Hairline() {
     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(IndustryDivider))
 }
 
@@ -318,7 +428,7 @@ fun ZoomFlash(zoomLabel: String, modifier: Modifier = Modifier) {
         Text(
             text = zoomLabel,
             style = TextStyle(
-                fontFamily = BarlowCondensed,
+                fontFamily = HeadingFont,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 20.sp,
                 letterSpacing = 0.06.em,

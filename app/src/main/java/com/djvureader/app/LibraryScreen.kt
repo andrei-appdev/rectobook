@@ -1,6 +1,8 @@
 package com.djvureader.app
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,13 +26,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -40,7 +46,6 @@ import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.IndustryDivider
 import com.djvureader.app.ui.theme.SectionLabel
 import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.blueprintCorners
 import com.djvureader.app.ui.theme.onSurfaceAlpha
 import java.util.Locale
 
@@ -48,10 +53,16 @@ import java.util.Locale
  * The library, styled after the design's first screen: wordmark, corpus line,
  * a single primary action, and the recent documents as bordered cards carrying
  * their own reading progress.
+ *
+ * [thumbnail] is read during composition, so a card redraws as soon as its page
+ * arrives; [onRequestThumbnail] is what sets that going, and is given the size
+ * in pixels the card will actually draw.
  */
 @Composable
 fun LibraryScreen(
     recents: List<RecentDocument>,
+    thumbnail: (RecentDocument) -> Bitmap?,
+    onRequestThumbnail: (RecentDocument, Int, Int) -> Unit,
     onPick: () -> Unit,
     onSample: () -> Unit,
     onOpenRecent: (RecentDocument) -> Unit,
@@ -93,8 +104,7 @@ fun LibraryScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = IndustryAccent),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(46.dp)
-                    .blueprintCorners(),
+                    .height(46.dp),
             ) {
                 StrokeIcon(FolderIcon, size = 17.dp, color = IndustryBackground)
                 Text(
@@ -134,6 +144,8 @@ fun LibraryScreen(
                 val document = recents[index]
                 RecentCard(
                     document = document,
+                    thumbnail = thumbnail(document),
+                    onRequestThumbnail = onRequestThumbnail,
                     onClick = { onOpenRecent(document) },
                     modifier = Modifier.padding(bottom = 18.dp),
                 )
@@ -145,6 +157,8 @@ fun LibraryScreen(
 @Composable
 private fun RecentCard(
     document: RecentDocument,
+    thumbnail: Bitmap?,
+    onRequestThumbnail: (RecentDocument, Int, Int) -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -156,11 +170,14 @@ private fun RecentCard(
             // (`margin-bottom: auto`), whatever the title's length.
             .height(IntrinsicSize.Min)
             .border(1.dp, IndustryDivider)
-            .blueprintCorners()
             .clickable(onClick = onClick)
-            .padding(10.dp),
+            .padding(12.dp),
     ) {
-        PageGlyph()
+        PageThumbnail(
+            document = document,
+            thumbnail = thumbnail,
+            onRequest = onRequestThumbnail,
+        )
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -209,11 +226,56 @@ private fun RecentCard(
     }
 }
 
+/** The design's page slot: a 46 x 62 sheet, bordered, on white. */
+private val ThumbnailWidth = 46.dp
+private val ThumbnailHeight = 62.dp
+
 /**
- * The stand-in page the design draws for each recent document: a bordered
- * sheet with a solid heading rule over ruled body lines. The design uses a
- * drawn glyph rather than a real thumbnail, which also means the library does
- * not have to open every document it lists.
+ * The document's own first page, in the slot the design fills with a drawn
+ * glyph. The glyph stays as the fallback - it is what a card shows while its
+ * page is being rendered, and what it keeps if the document cannot be read at
+ * all.
+ *
+ * The page is rendered at exactly the pixels this box occupies and fitted
+ * inside it, so a page of any shape sits centred on the sheet rather than being
+ * cropped to the slot.
+ */
+@Composable
+private fun PageThumbnail(
+    document: RecentDocument,
+    thumbnail: Bitmap?,
+    onRequest: (RecentDocument, Int, Int) -> Unit,
+) {
+    val width = with(LocalDensity.current) { ThumbnailWidth.roundToPx() }
+    val height = with(LocalDensity.current) { ThumbnailHeight.roundToPx() }
+
+    LaunchedEffect(document.key, document.sizeBytes) {
+        onRequest(document, width, height)
+    }
+
+    Box(
+        modifier = Modifier
+            .size(width = ThumbnailWidth, height = ThumbnailHeight)
+            .background(Color.White)
+            .border(1.dp, IndustryDivider),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (thumbnail == null) {
+            PageGlyph()
+        } else {
+            Image(
+                bitmap = thumbnail.asImageBitmap(),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().padding(1.dp),
+                contentScale = ContentScale.Fit,
+            )
+        }
+    }
+}
+
+/**
+ * The stand-in page the design draws for each recent document: a solid heading
+ * rule over ruled body lines.
  *
  * Both blocks are `repeating-linear-gradient`s in the design, and the sheet
  * clips them (`overflow: hidden`), so the body is cut off part-way rather than
@@ -221,12 +283,7 @@ private fun RecentCard(
  */
 @Composable
 private fun PageGlyph() {
-    Canvas(
-        modifier = Modifier
-            .size(width = 46.dp, height = 62.dp)
-            .background(Color.White)
-            .border(1.dp, IndustryDivider),
-    ) {
+    Canvas(modifier = Modifier.fillMaxSize()) {
         val border = 1.dp.toPx()
         val padX = border + 4.dp.toPx()
         val padY = border + 5.dp.toPx()

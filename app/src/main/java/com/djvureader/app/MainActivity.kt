@@ -157,6 +157,8 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
             val recents by viewModel.recents.collectAsState()
             LibraryScreen(
                 recents = recents,
+                thumbnail = viewModel::thumbnail,
+                onRequestThumbnail = viewModel::requestThumbnail,
                 onPick = openDocument,
                 onSample = viewModel::openBundledSample,
                 onOpenRecent = viewModel::openRecent,
@@ -308,6 +310,13 @@ private fun DocumentReader(
     // way a pinch does.
     val viewportCentre = Offset(viewport.width / 2f, viewport.height / 2f)
 
+    // Pages are numbered from 1 wherever the reader shows them; the list counts
+    // from 0. Overlapping calls are safe - scrolling is mutually exclusive, so
+    // dragging the slider leaves the last position asked for.
+    fun goToPage(page: Int) {
+        scope.launch { listState.scrollToItem((page - 1).coerceIn(0, state.pageCount - 1)) }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -407,6 +416,7 @@ private fun DocumentReader(
             canZoomIn = zoom < MAX_ZOOM,
             hidden = chromeHidden,
             onGoToPage = { showGoToSheet = true },
+            onSeekToPage = ::goToPage,
             onZoomOut = { zoomAbout(1f / ZOOM_STEP, viewportCentre) },
             onZoomIn = { zoomAbout(ZOOM_STEP, viewportCentre) },
             onZoomReset = { zoomAbout(MIN_ZOOM / zoom, viewportCentre) },
@@ -424,7 +434,7 @@ private fun DocumentReader(
             onDismiss = { showGoToSheet = false },
             onJump = { page ->
                 showGoToSheet = false
-                scope.launch { listState.scrollToItem(page - 1) }
+                goToPage(page)
             },
         )
     }
