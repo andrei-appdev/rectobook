@@ -54,6 +54,9 @@ android {
 
     buildFeatures {
         compose = true
+        // The about screen shows the version, and reads it from here rather
+        // than carrying a second copy that can disagree with the manifest.
+        buildConfig = true
     }
 }
 

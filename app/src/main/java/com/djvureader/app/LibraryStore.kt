@@ -14,7 +14,7 @@ import org.json.JSONObject
 
 /** A document the reader has opened before, and how far through it we got. */
 data class RecentDocument(
-    /** Stable identity: a persisted content URI, or `asset:` for the sample. */
+    /** Stable identity: the persisted content URI the document was opened from. */
     val key: String,
     val displayName: String,
     val lastPage: Int,
@@ -99,7 +99,10 @@ class LibraryStore(private val context: Context) {
                     sizeBytes = item.optLong("bytes"),
                 )
             }
-        }.getOrDefault(emptyList())
+            // Earlier builds shipped a sample document and recorded it under
+            // `asset:`. There is no such document now, so the entry is dropped
+            // rather than left in the list to fail when opened.
+        }.getOrDefault(emptyList()).filterNot { it.key.startsWith("asset:") }
     }
 
     private fun encode(entries: List<RecentDocument>): String {

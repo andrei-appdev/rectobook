@@ -13,8 +13,8 @@ data class LocalDocument(val file: File, val displayName: String)
 /**
  * DjVuLibre opens documents by filesystem path, but Android hands out
  * `content://` URIs whose bytes live behind a provider. Imported documents are
- * therefore copied into the cache first. DjVu files are small by design - the
- * bundled 57-page sample is 428 KB - which keeps the copy cheap.
+ * therefore copied into the cache first. DjVu files are small by design - a
+ * 57-page scan runs to a few hundred KB - which keeps the copy cheap.
  */
 object DocumentImporter {
 
@@ -47,18 +47,6 @@ object DocumentImporter {
      */
     fun cachedCopy(context: Context, uri: Uri): File? =
         File(File(context.cacheDir, IMPORT_DIR), importedName(uri)).takeIf { it.length() > 0 }
-
-    /** Copies the bundled sample out of assets, for a document that always works. */
-    fun importSample(context: Context, assetName: String): LocalDocument {
-        val directory = File(context.cacheDir, IMPORT_DIR).apply { mkdirs() }
-        val target = File(directory, assetName)
-        if (!target.exists() || target.length() == 0L) {
-            context.assets.open(assetName).use { input ->
-                target.outputStream().use { output -> input.copyTo(output) }
-            }
-        }
-        return LocalDocument(file = target, displayName = assetName)
-    }
 
     private fun importedName(uri: Uri) = "${uri.toString().hashCode().absoluteValue}.djvu"
 

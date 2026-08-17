@@ -95,6 +95,19 @@ internal val PagesIcon: Icon24 = { u ->
     moveTo(16 * u, 4 * u); lineTo(14 * u, 20 * u)
 }
 
+/**
+ * The design's about mark: a 9-unit ring around a lowercase i.
+ *
+ * The tittle is a filled dot in the design, and everything here is drawn with
+ * one stroked pen. A circle small enough that the stroke closes over its middle
+ * comes out as that dot.
+ */
+internal val InfoIcon: Icon24 = { u ->
+    addOval(Rect(3 * u, 3 * u, 21 * u, 21 * u))
+    moveTo(12 * u, 11 * u); lineTo(12 * u, 16.5f * u)
+    addOval(Rect(11.7f * u, 7.7f * u, 12.3f * u, 8.3f * u))
+}
+
 /** A 6.5-unit lens with its handle running out to (20.5, 20.5). */
 internal val SearchIcon: Icon24 = { u ->
     addOval(Rect(4.5f * u, 4.5f * u, 17.5f * u, 17.5f * u))
@@ -134,6 +147,7 @@ internal fun IconAction(
     icon: Icon24,
     label: String,
     onClick: () -> Unit,
+    size: Dp = 19.dp,
 ) {
     Box(
         modifier = Modifier
@@ -141,7 +155,40 @@ internal fun IconAction(
             .clickable(onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        StrokeIcon(icon)
+        StrokeIcon(icon, size = size)
+    }
+}
+
+/**
+ * The design's `.btn-primary`: a square block of accent, 46dp tall, with its
+ * mark and label centred together.
+ *
+ * Written out rather than dressed up from Material's `Button`, which brings a
+ * pill of its own and a minimum touch width, and which has to be argued out of
+ * both everywhere it is used. There is one primary action per screen and it
+ * looks the same on each.
+ */
+@Composable
+internal fun PrimaryAction(
+    icon: Icon24,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .height(46.dp)
+            .background(IndustryAccent)
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+    ) {
+        StrokeIcon(icon, size = 17.dp, color = IndustryBackground)
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelLarge,
+            color = IndustryBackground,
+        )
     }
 }
 
@@ -154,11 +201,14 @@ private const val HIDDEN_SHIFT = 1.02f
 /**
  * Reader top bar: back, what is being shown, and search.
  *
- * What it names is the caller's to say. Normally that is the document, but
- * while matches are marked on the page the bar names the search instead - the
- * page is no longer being shown plainly, and the bar is where that is admitted.
- * [backLabel] goes with it, since back then means leaving the search rather
- * than the document.
+ * One line, and the caller says what goes on it. Normally that is the
+ * document's name; while matches are marked on the page it names the search
+ * instead, since the page is no longer being shown plainly. [backLabel] goes
+ * with it, because back then means leaving the search rather than the document.
+ *
+ * The bar carries nothing about the file itself. Its format and length are
+ * facts about a document you have already chosen to read, and the page is
+ * worth more of the screen than they are.
  *
  * [hidden] runs 0..1 and is animated by the caller, so the bar slides rather
  * than appearing.
@@ -166,7 +216,6 @@ private const val HIDDEN_SHIFT = 1.02f
 @Composable
 fun ReaderTopBar(
     title: String,
-    subtitle: String,
     hidden: Float,
     backLabel: String,
     onBack: () -> Unit,
@@ -182,25 +231,18 @@ fun ReaderTopBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 9.dp),
+                .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             IconAction(BackIcon, backLabel, onBack)
-            Column(modifier = Modifier.weight(1f).padding(horizontal = 2.dp)) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.labelSmall
-                        .copy(fontFeatureSettings = TabularNums),
-                    color = onSurfaceAlpha(0.45f),
-                )
-            }
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
+            )
             IconAction(SearchIcon, "Search in document", onSearch)
         }
         Hairline()
@@ -236,7 +278,7 @@ fun ReaderBottomBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 12.dp),
+                .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {

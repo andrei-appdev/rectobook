@@ -75,14 +75,9 @@ class ThumbnailStore(private val context: Context) {
      * drawn glyph.
      */
     private fun sourceFile(document: RecentDocument): File? = runCatching {
-        val key = document.key
-        if (key.startsWith(ASSET_PREFIX)) {
-            DocumentImporter.importSample(context, key.removePrefix(ASSET_PREFIX)).file
-        } else {
-            val uri = Uri.parse(key)
-            DocumentImporter.cachedCopy(context, uri)
-                ?: DocumentImporter.import(context, uri).file
-        }
+        val uri = Uri.parse(document.key)
+        DocumentImporter.cachedCopy(context, uri)
+            ?: DocumentImporter.import(context, uri).file
     }.getOrNull()
 
     private fun decode(file: File): Bitmap? =
@@ -92,7 +87,6 @@ class ThumbnailStore(private val context: Context) {
 
     private companion object {
         const val THUMBNAIL_DIR = "thumbnails"
-        const val ASSET_PREFIX = "asset:"
 
         /** PNG ignores the quality argument; it is lossless either way. */
         const val PNG_QUALITY = 100

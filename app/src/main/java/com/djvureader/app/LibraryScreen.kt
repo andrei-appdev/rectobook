@@ -20,11 +20,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
@@ -39,10 +36,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import com.djvureader.app.ui.theme.IndustryAccent
 import com.djvureader.app.ui.theme.IndustryAccent700
-import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.IndustryDivider
 import com.djvureader.app.ui.theme.SectionLabel
 import com.djvureader.app.ui.theme.TabularNums
@@ -50,9 +45,9 @@ import com.djvureader.app.ui.theme.onSurfaceAlpha
 import java.util.Locale
 
 /**
- * The library, styled after the design's first screen: wordmark, corpus line,
- * a single primary action, and the recent documents as bordered cards carrying
- * their own reading progress.
+ * The library, styled after the design's first screen: wordmark, a single
+ * primary action, and the recent documents as bordered cards carrying their own
+ * reading progress.
  *
  * [thumbnail] is read during composition, so a card redraws as soon as its page
  * arrives; [onRequestThumbnail] is what sets that going, and is given the size
@@ -64,7 +59,7 @@ fun LibraryScreen(
     thumbnail: (RecentDocument) -> Bitmap?,
     onRequestThumbnail: (RecentDocument, Int, Int) -> Unit,
     onPick: () -> Unit,
-    onSample: () -> Unit,
+    onAbout: () -> Unit,
     onOpenRecent: (RecentDocument) -> Unit,
 ) {
     LazyColumn(
@@ -72,63 +67,35 @@ fun LibraryScreen(
         contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 28.dp),
     ) {
         item {
-            // The design aligns the wordmark and its version on a shared
-            // baseline, not on their boxes - the two faces have different
-            // descenders, so bottom alignment sits the version too low.
-            Row {
+            // The wordmark and the way out to the about screen. Neither the
+            // version nor a count of what has been read belongs here: the
+            // screen's job is to open a document.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
                 Text(
                     text = "DJVU READER",
                     style = MaterialTheme.typography.headlineLarge,
-                    modifier = Modifier.alignByBaseline(),
                 )
-                Text(
-                    text = "v1.0",
-                    style = MaterialTheme.typography.labelSmall,
-                    letterSpacing = 0.12.em,
-                    color = onSurfaceAlpha(0.45f),
-                    modifier = Modifier.alignByBaseline().padding(start = 10.dp),
-                )
+                IconAction(InfoIcon, "About this app", onAbout, size = 18.dp)
             }
-            Text(
-                text = corpusLine(recents),
-                style = MaterialTheme.typography.bodySmall,
-                color = onSurfaceAlpha(0.55f),
-                modifier = Modifier.padding(top = 4.dp, bottom = 18.dp),
-            )
         }
 
         item {
-            Button(
+            PrimaryAction(
+                icon = FolderIcon,
+                label = "OPEN FILE",
                 onClick = onPick,
-                shape = MaterialTheme.shapes.small,
-                colors = ButtonDefaults.buttonColors(containerColor = IndustryAccent),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(46.dp),
-            ) {
-                StrokeIcon(FolderIcon, size = 17.dp, color = IndustryBackground)
-                Text(
-                    text = "OPEN FILE",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
-            }
-            TextButton(
-                onClick = onSample,
-                modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-            ) {
-                Text(
-                    text = "Open bundled sample",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = onSurfaceAlpha(0.5f),
-                )
-            }
+                modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+            )
         }
 
         if (recents.isNotEmpty()) {
             item {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(text = "RECENT", style = SectionLabel, modifier = Modifier.alignByBaseline())
@@ -147,7 +114,7 @@ fun LibraryScreen(
                     thumbnail = thumbnail(document),
                     onRequestThumbnail = onRequestThumbnail,
                     onClick = { onOpenRecent(document) },
-                    modifier = Modifier.padding(bottom = 18.dp),
+                    modifier = Modifier.padding(bottom = 13.dp),
                 )
             }
         }
@@ -171,7 +138,7 @@ private fun RecentCard(
             .height(IntrinsicSize.Min)
             .border(1.dp, IndustryDivider)
             .clickable(onClick = onClick)
-            .padding(12.dp),
+            .padding(10.dp),
     ) {
         PageThumbnail(
             document = document,
@@ -189,6 +156,7 @@ private fun RecentCard(
                 style = MaterialTheme.typography.titleMedium,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 2.dp),
             )
             Text(
                 text = documentMeta(document),
@@ -226,9 +194,9 @@ private fun RecentCard(
     }
 }
 
-/** The design's page slot: a 46 x 62 sheet, bordered, on white. */
-private val ThumbnailWidth = 46.dp
-private val ThumbnailHeight = 62.dp
+/** The design's page slot: a 62 x 78 sheet, bordered, on white. */
+private val ThumbnailWidth = 62.dp
+private val ThumbnailHeight = 78.dp
 
 /**
  * The document's own first page, in the slot the design fills with a drawn
@@ -285,26 +253,26 @@ private fun PageThumbnail(
 private fun PageGlyph() {
     Canvas(modifier = Modifier.fillMaxSize()) {
         val border = 1.dp.toPx()
-        val padX = border + 4.dp.toPx()
-        val padY = border + 5.dp.toPx()
+        val padX = border + 5.dp.toPx()
+        val padY = border + 6.dp.toPx()
         val innerWidth = size.width - padX * 2
 
         clipRect(padX, padY, size.width - padX, size.height - padY) {
-            // Heading: 3dp of ink every 6dp, over a 6dp-tall block.
+            // Heading: 3dp of ink every 6dp, over a 7dp-tall block.
             stripes(
                 x = padX,
                 top = padY,
-                height = 6.dp.toPx(),
+                height = 7.dp.toPx(),
                 width = innerWidth,
                 ink = 3.dp.toPx(),
                 period = 6.dp.toPx(),
                 color = onSurfaceAlpha(0.6f),
             )
-            // Body: a 1dp hairline every 4dp, over a 44dp block the sheet clips.
+            // Body: a 1dp hairline every 4dp, over a 56dp block the sheet clips.
             stripes(
                 x = padX,
-                top = padY + 11.dp.toPx(),
-                height = 44.dp.toPx(),
+                top = padY + 13.dp.toPx(),
+                height = 56.dp.toPx(),
                 width = innerWidth,
                 ink = 1.dp.toPx(),
                 period = 4.dp.toPx(),
@@ -333,13 +301,6 @@ private fun DrawScope.stripes(
         )
         y += period
     }
-}
-
-private fun corpusLine(recents: List<RecentDocument>): String {
-    if (recents.isEmpty()) return "No documents yet"
-    val bytes = recents.sumOf { it.sizeBytes }
-    val documents = if (recents.size == 1) "1 document" else "${recents.size} documents"
-    return if (bytes > 0) "$documents · ${formatSize(bytes)} indexed" else documents
 }
 
 private fun documentMeta(document: RecentDocument): String = buildList {

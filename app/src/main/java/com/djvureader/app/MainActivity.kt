@@ -163,27 +163,45 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
     when (val current = state) {
         is ReaderState.Empty -> {
             val recents by viewModel.recents.collectAsState()
+            // Kept here rather than inside the library so it survives that
+            // screen's own scrolling and recomposition, and so back can be
+            // wired to it.
+            var showAbout by rememberSaveable { mutableStateOf(false) }
+
             LibraryScreen(
                 recents = recents,
                 thumbnail = viewModel::thumbnail,
                 onRequestThumbnail = viewModel::requestThumbnail,
                 onPick = openDocument,
-                onSample = viewModel::openBundledSample,
+                onAbout = { showAbout = true },
                 onOpenRecent = viewModel::openRecent,
             )
+
+            if (showAbout) {
+                BackHandler { showAbout = false }
+                AboutScreen(onBack = { showAbout = false })
+            }
         }
 
         is ReaderState.Loading -> Centered { CircularProgressIndicator() }
 
         is ReaderState.Error -> Centered {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(horizontal = 18.dp),
+            ) {
                 Text(
                     text = "Could not open document:\n${current.message}",
                     textAlign = TextAlign.Center,
                 )
-                Button(onClick = openDocument, modifier = Modifier.padding(top = 16.dp)) {
-                    Text("Choose another file")
-                }
+                // The same block the library opens files with. Nothing here is
+                // a lesser action for being on an error screen.
+                PrimaryAction(
+                    icon = FolderIcon,
+                    label = "CHOOSE ANOTHER FILE",
+                    onClick = openDocument,
+                    modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
+                )
             }
         }
 
@@ -192,24 +210,6 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
             viewModel = viewModel,
             onBack = viewModel::closeDocument,
         )
-    }
-}
-
-/**
- * The top bar's line while a search is showing, in the place the document's
- * format and length would be. Kept to the count: the query itself is a tap on
- * the magnifier away, and the bar has one line's room.
- */
-private fun matchSummary(results: SearchResults): String {
-    // A scan publishes as it goes, so a count shown mid-scan is a floor rather
-    // than an answer, and says so.
-    val soFar = if (results.running) " SO FAR" else ""
-    return when {
-        results.hits.isEmpty() && results.running -> "SEARCHING"
-        results.hits.isEmpty() -> "NO MATCHES"
-        results.hits.size == 1 -> "1 MATCH$soFar"
-        results.truncated -> "${results.hits.size}+ MATCHES"
-        else -> "${results.hits.size} MATCHES$soFar"
     }
 }
 
@@ -511,14 +511,6 @@ private fun DocumentReader(
             // what is on screen is this search, and the page is full of marks
             // that only mean anything once you know what was looked for.
             title = if (searching) "Search “${searchResults.query}”" else state.title,
-            // The document's own line, or the search's. Nothing about the
-            // document while its pages are marked: the bar describes what is
-            // on screen, and what is on screen is a result.
-            subtitle = if (searching) {
-                matchSummary(searchResults)
-            } else {
-                "${state.format.label} · ${state.pageCount} PP"
-            },
             hidden = chromeHidden,
             backLabel = if (searching) "Clear search" else "Back to library",
             onBack = if (searching) ({ endSearch() }) else onBack,

@@ -156,14 +156,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         openWith(key = uri.toString()) { DocumentImporter.import(getApplication(), uri) }
     }
 
-    fun openBundledSample() =
-        openWith(key = "asset:$SAMPLE_ASSET") {
-            DocumentImporter.importSample(getApplication(), SAMPLE_ASSET)
-        }
-
-    fun openRecent(recent: RecentDocument) {
-        if (recent.key.startsWith("asset:")) openBundledSample() else openUri(Uri.parse(recent.key))
-    }
+    fun openRecent(recent: RecentDocument) = openUri(Uri.parse(recent.key))
 
     /**
      * Closes the open document and returns to the library. The native handle is
@@ -454,8 +447,6 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private fun cacheKey(pageNumber: Int, width: Int) = "$pageNumber@$width"
 
     companion object {
-        const val SAMPLE_ASSET = "sample.djvu"
-
         /** Fallback shape (roughly A4 portrait) for pages not yet measured. */
         private const val DEFAULT_ASPECT_RATIO = 0.72f
 
