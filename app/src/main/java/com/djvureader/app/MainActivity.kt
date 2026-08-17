@@ -58,7 +58,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -119,9 +118,6 @@ private const val PROGRESS_SAVE_DELAY_MS = 600L
 
 /** How long zoom must settle before pages are re-rendered at the new scale. */
 private const val ZOOM_SETTLE_DELAY_MS = 150L
-
-/** How long the zoom readout lingers after a step, matching the design's 700ms. */
-private const val ZOOM_FLASH_MS = 700L
 
 /**
  * Gap between pages. Narrow enough that the backdrop reads as a rule between
@@ -381,17 +377,6 @@ private fun DocumentReader(
         renderZoom = zoom
     }
 
-    // The design flashes the scale over the middle of the page as it changes:
-    // live while the fingers are down, then lingering briefly after a step.
-    var zoomFlashes by remember { mutableIntStateOf(0) }
-    var flashLingering by remember { mutableStateOf(false) }
-    LaunchedEffect(zoomFlashes) {
-        if (zoomFlashes == 0) return@LaunchedEffect
-        flashLingering = true
-        delay(ZOOM_FLASH_MS)
-        flashLingering = false
-    }
-
     val contentWidthDp = with(LocalDensity.current) { (viewport.width * zoom).toInt().toDp() }
     val renderWidth = (viewport.width * renderZoom).toInt()
 
@@ -442,7 +427,6 @@ private fun DocumentReader(
         }
 
         zoom = target
-        zoomFlashes++
 
         // Requested rather than scrolled, so that the list takes its new
         // position in the same remeasure that lays the pages out at their new
@@ -674,10 +658,6 @@ private fun DocumentReader(
             onZoomReset = { zoomAbout(MIN_ZOOM / zoom, viewportCentre) },
             modifier = Modifier.align(Alignment.BottomCenter),
         )
-
-        if (flashLingering || gestureScale != 1f) {
-            ZoomFlash(zoomLabel = zoomLabel, modifier = Modifier.align(Alignment.Center))
-        }
 
         if (showOutline) {
             OutlineScreen(

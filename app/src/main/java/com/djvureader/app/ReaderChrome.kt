@@ -50,7 +50,6 @@ import com.djvureader.app.ui.theme.HeadingFont
 import com.djvureader.app.ui.theme.IndustryAccent
 import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.IndustryDivider
-import com.djvureader.app.ui.theme.IndustryNeutral900
 import com.djvureader.app.ui.theme.IndustryText
 import com.djvureader.app.ui.theme.TabularNums
 import com.djvureader.app.ui.theme.onSurfaceAlpha
@@ -485,27 +484,3 @@ internal fun Hairline() {
     Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(IndustryDivider))
 }
 
-/**
- * The zoom readout the design flashes over the middle of the page while the
- * scale is changing.
- */
-@Composable
-fun ZoomFlash(zoomLabel: String, modifier: Modifier = Modifier) {
-    Box(
-        modifier = modifier
-            .background(IndustryNeutral900.copy(alpha = 0.82f))
-            .padding(horizontal = 18.dp, vertical = 10.dp),
-    ) {
-        Text(
-            text = zoomLabel,
-            style = TextStyle(
-                fontFamily = HeadingFont,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 20.sp,
-                letterSpacing = 0.06.em,
-                fontFeatureSettings = TabularNums,
-            ),
-            color = IndustryBackground,
-        )
-    }
-}
