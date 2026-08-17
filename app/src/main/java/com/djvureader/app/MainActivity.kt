@@ -313,24 +313,42 @@ private fun DocumentReader(
 
         // Vertical: LazyListState is item-relative, so anchor to the fraction of
         // the item the focus falls in - that fraction is scale-independent.
-        val visible = listState.layoutInfo.visibleItemsInfo
+        //
+        // The two live in different coordinate spaces, and mixing them was an
+        // error of exactly the top content padding: item offsets are measured
+        // from the top of the list's content, `focus` from the top of the
+        // viewport, and the pages start a bar's height below that.
+        val info = listState.layoutInfo
+        val padding = info.beforeContentPadding
+        val focusInContent = focus.y - padding
+
+        val visible = info.visibleItemsInfo
         val anchorItem = visible.firstOrNull {
-            focus.y >= it.offset && focus.y < it.offset + it.size
+            focusInContent >= it.offset && focusInContent < it.offset + it.size
         } ?: visible.firstOrNull()
         val verticalAnchor = anchorItem?.takeIf { it.size > 0 }?.let { item ->
-            val fraction = ((focus.y - item.offset) / item.size).coerceIn(0f, 1f)
-            item.index to (fraction * item.size * factor - focus.y).roundToInt()
+            val fraction = ((focusInContent - item.offset) / item.size).coerceIn(0f, 1f)
+            // Where the anchor sits inside the page once the page has grown,
+            // less where it has to come back to on screen.
+            item.index to (padding + fraction * item.size * factor - focus.y).roundToInt()
         }
 
         zoom = target
         zoomFlashes++
+
+        // Requested rather than scrolled, so that the list takes its new
+        // position in the same remeasure that lays the pages out at their new
+        // width. Scrolling a frame later drew the pages once grown but not yet
+        // anchored, which is what made the page jump as a pinch ended.
+        verticalAnchor?.let { (index, offset) ->
+            listState.requestScrollToItem(index, offset.coerceAtLeast(0))
+        }
+
         scope.launch {
-            // Let the list re-measure at the new width before scrolling,
-            // otherwise the scroll clamps against stale bounds.
+            // The horizontal scroller has no equivalent request, and clamps
+            // against bounds it only learns at the remeasure, so this one still
+            // has to wait a frame.
             withFrameNanos { }
-            verticalAnchor?.let { (index, offset) ->
-                listState.scrollToItem(index, offset.coerceAtLeast(0))
-            }
             horizontalScroll.scrollTo(
                 targetScrollX.coerceIn(0, horizontalScroll.maxValue),
             )
