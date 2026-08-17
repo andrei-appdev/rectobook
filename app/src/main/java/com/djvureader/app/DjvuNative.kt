@@ -49,6 +49,16 @@ internal object DjvuNative {
     external fun nativeGetPageLinks(handle: Long, pageNumber: Int): ByteArray?
 
     /**
+     * The document's outline, or null if it could not be read.
+     *
+     * Encoded depth first, each entry as its depth, then its target and its
+     * title, each as a big-endian length followed by that many UTF-8 bytes.
+     * A flat run rather than a tree, because the depths are enough to rebuild
+     * one and a byte array crosses the boundary once.
+     */
+    external fun nativeGetOutline(handle: Long): ByteArray?
+
+    /**
      * Renders part of [pageNumber] into [bitmap], which must be ARGB_8888.
      *
      * The page is scaled to [pageWidth] x [pageHeight]; the region of that

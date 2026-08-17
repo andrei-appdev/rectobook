@@ -266,6 +266,9 @@ private fun DocumentReader(
     val searchResults by viewModel.search.collectAsState()
     // Held out here so it survives the panel being closed and opened again.
     val searchListState = rememberLazyListState()
+    var showOutline by remember { mutableStateOf(false) }
+    val outlineListState = rememberLazyListState()
+    val outline by viewModel.outline.collectAsState()
 
     // The design's chrome is transient: it starts visible and a tap on the page
     // takes it away, so a document can be read edge to edge.
@@ -279,7 +282,7 @@ private fun DocumentReader(
     // The system bars go with the reader's own, so one tap clears everything
     // off the page. Search is a screen in its own right rather than a page to
     // read, so it always gets them back.
-    SystemBars(visible = chromeVisible || showSearch)
+    SystemBars(visible = chromeVisible || showSearch || showOutline)
 
     val selection by viewModel.selection.collectAsState()
     val clipboard = LocalClipboardManager.current
@@ -309,9 +312,10 @@ private fun DocumentReader(
     // Back leaves the selection, then the search screen, then the search, then
     // the document - one layer at a time, and the same order the top bar's
     // arrow goes in.
-    BackHandler(enabled = showSearch || searching || selection != null) {
+    BackHandler(enabled = showSearch || showOutline || searching || selection != null) {
         when {
             selection != null -> viewModel.clearSelection()
+            showOutline -> showOutline = false
             showSearch -> showSearch = false
             else -> endSearch()
         }
@@ -534,7 +538,7 @@ private fun DocumentReader(
                     // The search panel covers the page; touches on it are the
                     // panel's alone. While text is being picked out the page
                     // belongs to the selection for the same reason.
-                    enabled = !showSearch && selection == null,
+                    enabled = !showSearch && !showOutline && selection == null,
                     onZoom = { scale, focus ->
                         gestureFocus = focus
                         gestureScale = (gestureScale * scale)
@@ -645,6 +649,14 @@ private fun DocumentReader(
                 viewModel.clearSelection()
                 showSearch = true
             },
+            onContents = if (outline.isEmpty()) {
+                null
+            } else {
+                {
+                    viewModel.clearSelection()
+                    showOutline = true
+                }
+            },
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
@@ -665,6 +677,25 @@ private fun DocumentReader(
 
         if (flashLingering || gestureScale != 1f) {
             ZoomFlash(zoomLabel = zoomLabel, modifier = Modifier.align(Alignment.Center))
+        }
+
+        if (showOutline) {
+            OutlineScreen(
+                outline = outline,
+                pageCount = state.pageCount,
+                listState = outlineListState,
+                onClose = { showOutline = false },
+                onOpen = { entry ->
+                    val target = entry.target
+                    if (target is LinkTarget.Page) {
+                        showOutline = false
+                        // The chrome comes back with the page, so the reader
+                        // can see where they landed.
+                        chromeVisible = true
+                        goToPage(target.pageNumber + 1)
+                    }
+                },
+            )
         }
 
         // Covers the reader rather than sitting beside it, as the design draws

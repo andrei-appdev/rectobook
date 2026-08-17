@@ -227,6 +227,41 @@ bool mapareaBox(miniexp_t area, int box[4]) {
     return false;
 }
 
+// Flattens an outline into the packed buffer, depth first.
+//
+// The tree is `(bookmarks entry...)` where an entry is `("title" "target"
+// child...)`, exactly as djvused prints it. Each entry is written as its depth,
+// then its target, then its title, each string as a length and that many
+// bytes. Depth is what lets Kotlin rebuild the tree from a flat run.
+void collectOutline(miniexp_t entries, int depth, std::string &out) {
+    for (miniexp_t rest = entries; miniexp_consp(rest); rest = miniexp_cdr(rest)) {
+        miniexp_t entry = miniexp_car(rest);
+        if (!miniexp_consp(entry)) {
+            continue;
+        }
+        miniexp_t title = miniexp_car(entry);
+        miniexp_t target = miniexp_car(miniexp_cdr(entry));
+        if (!miniexp_stringp(title)) {
+            continue;
+        }
+        const char *titleText = miniexp_to_str(title);
+        const char *targetText = miniexp_stringp(target) ? miniexp_to_str(target) : "";
+        if (!titleText) {
+            continue;
+        }
+
+        appendInt(out, depth);
+        const auto targetLength = static_cast<int>(std::strlen(targetText));
+        appendInt(out, targetLength);
+        out.append(targetText, targetLength);
+        const auto titleLength = static_cast<int>(std::strlen(titleText));
+        appendInt(out, titleLength);
+        out.append(titleText, titleLength);
+
+        collectOutline(miniexp_cddr(entry), depth + 1, out);
+    }
+}
+
 }  // namespace
 
 extern "C" {
@@ -331,6 +366,40 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageInfo(JNIEnv *env, jobject, jlong
 // coordinates are relative to the rotated page while the hidden text is
 // relative to the unrotated one. Kotlin does the mapping, where the page's
 // size is already known.
+// Returns the document's outline, packed as a depth-first run of
+// depth, target length, target, title length, title - all integers
+// big-endian, all strings UTF-8. Empty when the document has no outline.
+JNIEXPORT jbyteArray JNICALL
+Java_com_djvureader_app_DjvuNative_nativeGetOutline(JNIEnv *env, jobject, jlong handle) {
+    Document *doc = asDocument(handle);
+    if (!doc || !doc->document) {
+        return nullptr;
+    }
+
+    miniexp_t outline;
+    while ((outline = ddjvu_document_get_outline(doc->document)) == miniexp_dummy) {
+        drainMessages(doc->context, /*wait=*/true);
+    }
+
+    std::string collected;
+    if (miniexp_consp(outline)) {
+        // The list opens with the `bookmarks` symbol; the entries follow it.
+        collectOutline(miniexp_cdr(outline), /*depth=*/0, collected);
+        ddjvu_miniexp_release(doc->document, outline);
+    }
+
+    const auto size = static_cast<jsize>(collected.size());
+    jbyteArray result = env->NewByteArray(size);
+    if (!result) {
+        return nullptr;
+    }
+    if (size > 0) {
+        env->SetByteArrayRegion(result, 0, size,
+                                reinterpret_cast<const jbyte *>(collected.data()));
+    }
+    return result;
+}
+
 JNIEXPORT jbyteArray JNICALL
 Java_com_djvureader_app_DjvuNative_nativeGetPageLinks(JNIEnv *env, jobject, jlong handle,
                                                      jint pageNumber) {

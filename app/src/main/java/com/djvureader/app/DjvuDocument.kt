@@ -154,6 +154,45 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
         return links
     }
 
+    /**
+     * The document's outline, rebuilt from the flat run the JNI packs.
+     *
+     * Each entry carries its depth, and the entries arrive depth first, so a
+     * stack of the open parents is enough: anything deeper than the last entry
+     * belongs to it, anything shallower closes it.
+     */
+    override fun outline(): List<OutlineEntry> {
+        checkOpen()
+        val packed = DjvuNative.nativeGetOutline(handle) ?: return emptyList()
+        val buffer = ByteBuffer.wrap(packed).order(ByteOrder.BIG_ENDIAN)
+
+        val roots = mutableListOf<OutlineEntry>()
+        // Children of each open parent, innermost last. Entries are immutable,
+        // so they are built on the way back out rather than as they are read.
+        val open = mutableListOf<Pair<OutlineEntry, MutableList<OutlineEntry>>>()
+
+        fun closeTo(depth: Int) {
+            while (open.size > depth) {
+                val (entry, children) = open.removeAt(open.lastIndex)
+                val built = entry.copy(children = children.toList())
+                if (open.isEmpty()) roots += built else open.last().second += built
+            }
+        }
+
+        while (buffer.remaining() >= Int.SIZE_BYTES) {
+            val depth = buffer.int
+            val target = buffer.readString() ?: break
+            val title = buffer.readString() ?: break
+            closeTo(depth)
+            open += OutlineEntry(
+                title = title.ifBlank { "Untitled" },
+                target = linkTarget(target),
+            ) to mutableListOf()
+        }
+        closeTo(0)
+        return roots
+    }
+
     /** One word of hidden text, boxed in the page's own bottom-left pixels. */
     private class Word(
         val text: String,
@@ -234,6 +273,14 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
     }
 
     companion object {
+        /** A length-prefixed UTF-8 string, or null if the buffer is short. */
+        private fun ByteBuffer.readString(): String? {
+            if (remaining() < Int.SIZE_BYTES) return null
+            val length = int
+            if (length < 0 || length > remaining()) return null
+            return ByteArray(length).also(::get).toString(Charsets.UTF_8)
+        }
+
         /** Four box edges and a length, per word. */
         private const val WORD_HEADER_BYTES = 5 * Int.SIZE_BYTES
 

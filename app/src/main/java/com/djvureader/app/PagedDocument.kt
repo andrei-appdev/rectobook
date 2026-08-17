@@ -114,7 +114,33 @@ interface PagedDocument : Closeable {
      * - a table of contents, an index, a cross-reference.
      */
     fun links(pageNumber: Int): List<PageLink>
+
+    /**
+     * The document's table of contents, or empty if it carries none.
+     *
+     * A property of the whole document rather than of a page, and read once
+     * when it is opened.
+     */
+    fun outline(): List<OutlineEntry>
 }
+
+/**
+ * One line of a document's table of contents, and whatever sits under it.
+ *
+ * [target] is null for an entry that points nowhere this reader can follow -
+ * a heading that only groups the entries below it, or a destination named in a
+ * way that cannot be resolved. Such an entry is still worth showing, because
+ * its children are.
+ */
+data class OutlineEntry(
+    val title: String,
+    val target: LinkTarget?,
+    val children: List<OutlineEntry> = emptyList(),
+)
+
+/** Every entry in [outline], flattened depth-first, each with its depth. */
+fun List<OutlineEntry>.flattenOutline(depth: Int = 0): List<Pair<OutlineEntry, Int>> =
+    flatMap { entry -> listOf(entry to depth) + entry.children.flattenOutline(depth + 1) }
 
 /** Where a link goes. */
 sealed interface LinkTarget {

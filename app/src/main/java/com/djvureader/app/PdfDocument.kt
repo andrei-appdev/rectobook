@@ -207,6 +207,20 @@ class PdfDocument private constructor(
         }.getOrDefault(emptyList())
     }
 
+    /**
+     * PDFium walks the outline itself and resolves each entry to a page index.
+     */
+    override fun outline(): List<OutlineEntry> = locked {
+        if (closed) return@locked emptyList()
+        runCatching { document.getTableOfContents().map(::toEntry) }.getOrDefault(emptyList())
+    }
+
+    private fun toEntry(bookmark: PdfiumDocument.Bookmark): OutlineEntry = OutlineEntry(
+        title = bookmark.title.orEmpty().ifBlank { "Untitled" },
+        target = LinkTarget.Page(bookmark.pageIdx.toInt()),
+        children = bookmark.children.map(::toEntry),
+    )
+
     override fun close() = locked {
         if (!closed) {
             closed = true

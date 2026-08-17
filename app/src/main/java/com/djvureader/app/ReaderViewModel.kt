@@ -172,6 +172,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         pageTextCache.clear()
         linkCache.clear()
         clearSelection()
+        _outline.value = emptyList()
         _state.value = ReaderState.Empty
         viewModelScope.launch(Dispatchers.IO) {
             documentLock.withLock {
@@ -214,6 +215,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         clearSelection()
         pageTextCache.clear()
         linkCache.clear()
+        _outline.value = emptyList()
         // Opening a document again - even the same one - resumes it again.
         restoredKey = null
         _state.value = ReaderState.Loading
@@ -252,6 +254,13 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                         pageCount = opened.pageCount,
                         sizeBytes = opened.sizeBytes,
                     )
+                    // After the state, not with it: a long outline should
+                    // not hold the first page off the screen.
+                    launch {
+                        _outline.value = withContext(Dispatchers.IO) {
+                            documentLock.withLock { document?.outline().orEmpty() }
+                        }
+                    }
                     _state.value = ReaderState.Loaded(
                         title = opened.displayName,
                         format = opened.format,
@@ -386,6 +395,17 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         linkCache[pageNumber] = links
         return links
     }
+
+    private val _outline = MutableStateFlow<List<OutlineEntry>>(emptyList())
+
+    /**
+     * The open document's table of contents, empty until it has been read and
+     * for documents that carry none.
+     *
+     * Observable rather than fetched on demand, because the reader's chrome
+     * shows a way in only when there is something to show.
+     */
+    val outline: StateFlow<List<OutlineEntry>> = _outline.asStateFlow()
 
     private val _selection = MutableStateFlow<TextSelection?>(null)
 

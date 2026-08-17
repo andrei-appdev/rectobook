@@ -108,6 +108,17 @@ internal val InfoIcon: Icon24 = { u ->
     addOval(Rect(11.7f * u, 7.7f * u, 12.3f * u, 8.3f * u))
 }
 
+/**
+ * Contents: three ruled entries, each with a short lead, in the manner of an
+ * indented list.
+ */
+internal val ContentsIcon: Icon24 = { u ->
+    for (y in intArrayOf(7, 12, 17)) {
+        moveTo(4 * u, y * u); lineTo(6 * u, y * u)
+        moveTo(9 * u, y * u); lineTo(20 * u, y * u)
+    }
+}
+
 /** A 6.5-unit lens with its handle running out to (20.5, 20.5). */
 internal val SearchIcon: Icon24 = { u ->
     addOval(Rect(4.5f * u, 4.5f * u, 17.5f * u, 17.5f * u))
@@ -221,6 +232,9 @@ fun ReaderTopBar(
     onBack: () -> Unit,
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
+    // Only for documents that carry one. A button that opens an empty screen
+    // teaches the reader to stop pressing it.
+    onContents: (() -> Unit)? = null,
 ) {
     Column(
         modifier = modifier
@@ -243,6 +257,7 @@ fun ReaderTopBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
             )
+            onContents?.let { IconAction(ContentsIcon, "Contents", it) }
             IconAction(SearchIcon, "Search in document", onSearch)
         }
         Hairline()
