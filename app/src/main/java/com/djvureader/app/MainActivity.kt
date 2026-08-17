@@ -95,11 +95,14 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.djvureader.app.ui.theme.DjvuTheme
+import com.djvureader.app.ui.theme.Industry
 import com.djvureader.app.ui.theme.IndustryAccent
 import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.IndustryDivider
 import com.djvureader.app.ui.theme.IndustryNeutral200
+import com.djvureader.app.ui.theme.LightIndustry
 import com.djvureader.app.ui.theme.TabularNums
+import com.djvureader.app.ui.theme.ink
 import com.djvureader.app.ui.theme.onSurfaceAlpha
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -157,17 +160,21 @@ class MainActivity : ComponentActivity() {
         // anyway; asking for it explicitly means older devices hide and reveal
         // the bars the same way rather than resizing the window underneath us.
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowCompat.getInsetsController(window, window.decorView).apply {
-            // The design is light throughout, so the clock and the navigation
-            // icons have to be dark to be seen against it.
-            isAppearanceLightStatusBars = true
-            isAppearanceLightNavigationBars = true
-        }
 
         // A document may arrive from another app via ACTION_VIEW.
         val initialUri: Uri? = intent?.data
         setContent {
             DjvuTheme {
+                // The clock and the navigation icons have to contrast with
+                // whatever the app is drawing behind them, so they follow the
+                // palette rather than being fixed dark.
+                val darkChrome = Industry.isDark
+                LaunchedEffect(darkChrome) {
+                    WindowCompat.getInsetsController(window, window.decorView).apply {
+                        isAppearanceLightStatusBars = !darkChrome
+                        isAppearanceLightNavigationBars = !darkChrome
+                    }
+                }
                 Surface(modifier = Modifier.fillMaxSize()) {
                     // Keep the bar and page list clear of the status and
                     // navigation bars.
@@ -776,6 +783,13 @@ private fun PageView(
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
+
+    // The marks a page carries, all shades of the one accent. Read here
+    // because a draw lambda is not a composable scope.
+    val accent = IndustryAccent
+    val linkRuleColor = accent.copy(alpha = 0.55f)
+    val highlightWash = accent.copy(alpha = 0.32f)
+    val selectionWash = accent.copy(alpha = 0.30f)
     // Seeded from whatever is already in memory, and deliberately not keyed on
     // renderWidth, so a page never blanks: zooming keeps showing the previous
     // rendering scaled until a sharper one arrives, and an item recomposed by
@@ -867,7 +881,8 @@ private fun PageView(
             // does the separating, so a scan that is white to its margin still
             // ends visibly.
             .background(Color.White)
-            .border(1.dp, onSurfaceAlpha(0.14f)),
+            // The paper's own edge, so paper ink again rather than the app's.
+            .border(1.dp, LightIndustry.ink(0.14f)),
         contentAlignment = Alignment.Center,
     ) {
         val current = bitmap
@@ -876,7 +891,9 @@ private fun PageView(
                 text = "${pageNumber + 1}",
                 style = MaterialTheme.typography.labelMedium
                     .copy(fontFeatureSettings = TabularNums),
-                color = onSurfaceAlpha(0.45f),
+                // On the page's own white, so it takes paper ink rather than
+                // the app's, which after dark would be white on white.
+                color = LightIndustry.ink(0.45f),
             )
         } else {
             Image(
@@ -896,7 +913,7 @@ private fun PageView(
                 links.forEach { link ->
                     val foot = link.bounds.bottom * size.height
                     drawRect(
-                        color = IndustryAccent.copy(alpha = 0.55f),
+                        color = linkRuleColor,
                         topLeft = Offset(link.bounds.left * size.width, foot - LinkRule.toPx()),
                         size = Size(
                             (link.bounds.right - link.bounds.left) * size.width,
@@ -914,7 +931,7 @@ private fun PageView(
             Canvas(modifier = Modifier.matchParentSize()) {
                 highlights.forEach { mark ->
                     drawRect(
-                        color = IndustryAccent.copy(alpha = 0.32f),
+                        color = highlightWash,
                         topLeft = Offset(mark.left * size.width, mark.top * size.height),
                         size = Size(
                             (mark.right - mark.left) * size.width,
@@ -932,7 +949,7 @@ private fun PageView(
             Canvas(modifier = Modifier.matchParentSize()) {
                 selectionRects.forEach { picked ->
                     drawRect(
-                        color = IndustryAccent.copy(alpha = 0.30f),
+                        color = selectionWash,
                         topLeft = Offset(picked.left * size.width, picked.top * size.height),
                         size = Size(
                             (picked.right - picked.left) * size.width,
@@ -943,7 +960,7 @@ private fun PageView(
                 selectionEnds(selectionRects, IntSize(size.width.toInt(), size.height.toInt()))
                     ?.forEach { end ->
                         drawRect(
-                            color = IndustryAccent,
+                            color = accent,
                             topLeft = Offset(end.x - HandleWidth.toPx() / 2f, end.y),
                             size = Size(HandleWidth.toPx(), HandleHeight.toPx()),
                         )

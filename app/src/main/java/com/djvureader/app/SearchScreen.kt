@@ -20,6 +20,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -151,7 +152,7 @@ private fun HitRow(hit: SearchHit, onClick: () -> Unit) {
                 modifier = Modifier.padding(top = 1.dp),
             )
             Text(
-                text = snippet(hit),
+                text = snippet(hit, IndustryAccent.copy(alpha = 0.32f)),
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontSize = 13.sp,
                     lineHeight = 20.sp,
@@ -169,10 +170,15 @@ private fun HitRow(hit: SearchHit, onClick: () -> Unit) {
     }
 }
 
-/** The design's `<mark>`: the term on a wash of accent, the text left alone. */
-private fun snippet(hit: SearchHit): AnnotatedString = buildAnnotatedString {
+/**
+ * The design's `<mark>`: the term on a wash of accent, the text left alone.
+ *
+ * The wash is passed in rather than read here, so this stays a plain string
+ * builder and the colour comes from wherever it is being drawn.
+ */
+private fun snippet(hit: SearchHit, wash: Color): AnnotatedString = buildAnnotatedString {
     append(hit.before)
-    withStyle(SpanStyle(background = IndustryAccent.copy(alpha = 0.32f))) {
+    withStyle(SpanStyle(background = wash)) {
         append(hit.term)
     }
     append(hit.after)

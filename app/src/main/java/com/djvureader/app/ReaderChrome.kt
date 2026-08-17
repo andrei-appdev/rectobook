@@ -377,6 +377,9 @@ private fun PageSlider(
     modifier: Modifier = Modifier,
 ) {
     var dragPage by remember { mutableStateOf<Int?>(null) }
+    // Read here rather than in the draw lambda, which is not a composable.
+    val trackColor = onSurfaceAlpha(0.14f)
+    val markColor = IndustryAccent
     val page = (dragPage ?: currentPage).coerceIn(1, pageCount.coerceAtLeast(1))
 
     // The handle's centre travels between its own half-widths so it never
@@ -438,17 +441,17 @@ private fun PageSlider(
         val centre = thumbW / 2f + (size.width - thumbW) * fraction
 
         drawRect(
-            color = onSurfaceAlpha(0.14f),
+            color = trackColor,
             topLeft = Offset(0f, trackTop),
             size = Size(size.width, track),
         )
         drawRect(
-            color = IndustryAccent,
+            color = markColor,
             topLeft = Offset(0f, trackTop),
             size = Size(centre, track),
         )
         drawRect(
-            color = IndustryAccent,
+            color = markColor,
             topLeft = Offset(centre - thumbW / 2f, (size.height - thumbH) / 2f),
             size = Size(thumbW, thumbH),
         )

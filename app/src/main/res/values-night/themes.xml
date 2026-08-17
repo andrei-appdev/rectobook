@@ -1,0 +1,11 @@
+<resources>
+    <!--
+      The same window after dark. A platform DayNight theme would save this
+      file, but the one in the framework arrives at API 29 and this app runs
+      from 24, so the night variant is spelled out instead.
+    -->
+    <style name="Theme.DjvuReader" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
+</resources>

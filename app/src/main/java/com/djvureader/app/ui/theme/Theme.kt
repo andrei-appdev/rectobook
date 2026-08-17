@@ -1,31 +1,46 @@
 package com.djvureader.app.ui.theme
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.unit.dp
 
-private val IndustryColors = lightColorScheme(
-    primary = IndustryAccent,
-    onPrimary = IndustryBackground,
-    primaryContainer = IndustryAccent100,
-    onPrimaryContainer = IndustryAccent800,
-    secondary = IndustryAccent700,
-    onSecondary = IndustryBackground,
-    background = IndustryBackground,
-    onBackground = IndustryText,
-    surface = IndustryBackground,
-    onSurface = IndustryText,
-    surfaceVariant = IndustrySurface,
-    onSurfaceVariant = IndustryNeutral700,
-    surfaceContainer = IndustrySurface,
-    surfaceContainerHigh = IndustryNeutral200,
-    outline = IndustryDivider,
-    outlineVariant = IndustryDivider,
-    scrim = IndustryNeutral900,
-)
+/**
+ * Material's scheme, filled in from the palette.
+ *
+ * Almost nothing in this app asks Material for a colour - the design is drawn
+ * with the palette directly - but the few Material parts that remain, the
+ * modal sheets and the progress spinner, take theirs from here.
+ */
+private fun schemeFor(palette: IndustryPalette) = with(palette) {
+    // Started from Material's own light or dark scheme so that the roles this
+    // design never names still land the right way up.
+    val base = if (isDark) darkColorScheme() else lightColorScheme()
+    base.copy(
+        primary = accent,
+        onPrimary = background,
+        primaryContainer = accentWash,
+        onPrimaryContainer = accentDeepest,
+        secondary = accentDeep,
+        onSecondary = background,
+        background = background,
+        onBackground = text,
+        surface = background,
+        onSurface = text,
+        surfaceVariant = surface,
+        onSurfaceVariant = mutedText,
+        surfaceContainer = surface,
+        surfaceContainerHigh = desk,
+        outline = text.copy(alpha = 0.16f),
+        outlineVariant = text.copy(alpha = 0.16f),
+        scrim = scrim,
+    )
+}
 
 /**
  * Nothing in this design is rounded: styles.css squares off every card,
@@ -40,16 +55,23 @@ private val SquareShapes = Shapes(
 )
 
 /**
- * The design is drawn light-only, so this does not follow the system dark
- * setting. A dark variant would need its own palette rather than an inversion:
- * the accent and the paper-white page surfaces do not survive one.
+ * The design ships light only; [DarkIndustry] is the same design worked out
+ * for the other end. Which one is in force follows the system setting, with no
+ * switch of its own - a reader that is dark everywhere else should not have to
+ * be told again here.
  */
 @Composable
-fun DjvuTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = IndustryColors,
-        typography = IndustryTypography,
-        shapes = SquareShapes,
-        content = content,
-    )
+fun DjvuTheme(
+    dark: Boolean = isSystemInDarkTheme(),
+    content: @Composable () -> Unit,
+) {
+    val palette = if (dark) DarkIndustry else LightIndustry
+    CompositionLocalProvider(LocalIndustryPalette provides palette) {
+        MaterialTheme(
+            colorScheme = schemeFor(palette),
+            typography = IndustryTypography,
+            shapes = SquareShapes,
+            content = content,
+        )
+    }
 }

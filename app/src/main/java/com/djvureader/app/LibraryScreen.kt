@@ -52,8 +52,10 @@ import com.djvureader.app.ui.theme.IndustryAccent
 import com.djvureader.app.ui.theme.IndustryAccent700
 import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.IndustryDivider
+import com.djvureader.app.ui.theme.LightIndustry
 import com.djvureader.app.ui.theme.SectionLabel
 import com.djvureader.app.ui.theme.TabularNums
+import com.djvureader.app.ui.theme.ink
 import com.djvureader.app.ui.theme.onSurfaceAlpha
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -363,6 +365,11 @@ private fun PageThumbnail(
  */
 @Composable
 private fun PageGlyph() {
+    // Paper ink, not the app's. This is drawn on a white sheet in both
+    // palettes, so it cannot follow a theme that turns the ink pale.
+    val headingInk = LightIndustry.ink(0.6f)
+    val bodyInk = LightIndustry.ink(0.32f)
+
     Canvas(modifier = Modifier.fillMaxSize()) {
         val border = 1.dp.toPx()
         val padX = border + 5.dp.toPx()
@@ -378,7 +385,7 @@ private fun PageGlyph() {
                 width = innerWidth,
                 ink = 3.dp.toPx(),
                 period = 6.dp.toPx(),
-                color = onSurfaceAlpha(0.6f),
+                color = headingInk,
             )
             // Body: a 1dp hairline every 4dp, over a 56dp block the sheet clips.
             stripes(
@@ -388,7 +395,7 @@ private fun PageGlyph() {
                 width = innerWidth,
                 ink = 1.dp.toPx(),
                 period = 4.dp.toPx(),
-                color = onSurfaceAlpha(0.32f),
+                color = bodyInk,
             )
         }
     }

@@ -1,3 +1,11 @@
 <resources>
-    <style name="Theme.DjvuReader" parent="android:Theme.Material.Light.NoActionBar" />
+    <!--
+      The window behind Compose. It matters for the moment before the first
+      frame, and for the system bars, which the app draws its own content
+      under - so both are cleared here and coloured by whatever is behind them.
+    -->
+    <style name="Theme.DjvuReader" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 </resources>
