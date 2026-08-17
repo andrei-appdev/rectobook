@@ -152,7 +152,13 @@ internal fun IconAction(
 private const val HIDDEN_SHIFT = 1.02f
 
 /**
- * Reader top bar: back to the library, the document's identity, and search.
+ * Reader top bar: back, what is being shown, and search.
+ *
+ * What it names is the caller's to say. Normally that is the document, but
+ * while matches are marked on the page the bar names the search instead - the
+ * page is no longer being shown plainly, and the bar is where that is admitted.
+ * [backLabel] goes with it, since back then means leaving the search rather
+ * than the document.
  *
  * [hidden] runs 0..1 and is animated by the caller, so the bar slides rather
  * than appearing.
@@ -160,9 +166,9 @@ private const val HIDDEN_SHIFT = 1.02f
 @Composable
 fun ReaderTopBar(
     title: String,
-    formatLabel: String,
-    pageCount: Int,
+    subtitle: String,
     hidden: Float,
+    backLabel: String,
     onBack: () -> Unit,
     onSearch: () -> Unit,
     modifier: Modifier = Modifier,
@@ -180,7 +186,7 @@ fun ReaderTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            IconAction(BackIcon, "Back to library", onBack)
+            IconAction(BackIcon, backLabel, onBack)
             Column(modifier = Modifier.weight(1f).padding(horizontal = 2.dp)) {
                 Text(
                     text = title,
@@ -189,7 +195,7 @@ fun ReaderTopBar(
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "$formatLabel · $pageCount PP",
+                    text = subtitle,
                     style = MaterialTheme.typography.labelSmall
                         .copy(fontFeatureSettings = TabularNums),
                     color = onSurfaceAlpha(0.45f),

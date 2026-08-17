@@ -15,13 +15,17 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -43,6 +47,11 @@ import com.djvureader.app.ui.theme.onSurfaceAlpha
  *
  * [autoFocus] opens the keyboard as the field appears, which suits a field that
  * is the only reason its panel exists.
+ *
+ * The caret is tracked here rather than left to the string overload of
+ * [BasicTextField], which starts a field carrying text with the caret before
+ * the first character. A field that reappears holding what was typed into it
+ * should be ready to go on typing, not to type behind.
  */
 @Composable
 internal fun IndustryTextField(
@@ -61,6 +70,16 @@ internal fun IndustryTextField(
     val interactionSource = remember { MutableInteractionSource() }
     val focused by interactionSource.collectIsFocusedAsState()
 
+    // Text plus caret. Seeded with the caret at the end, so a field composed
+    // over existing text carries on from it.
+    var field by remember { mutableStateOf(TextFieldValue(value, TextRange(value.length))) }
+    // The caller is free to refuse or rewrite what was typed - the go-to-page
+    // field drops anything that is not a digit - so what it holds wins, and the
+    // caret goes to the end of whatever it made of the edit.
+    if (field.text != value) {
+        field = TextFieldValue(value, TextRange(value.length))
+    }
+
     if (autoFocus) {
         LaunchedEffect(Unit) { focusRequester.requestFocus() }
     }
@@ -73,8 +92,11 @@ internal fun IndustryTextField(
     )
 
     BasicTextField(
-        value = value,
-        onValueChange = onValueChange,
+        value = field,
+        onValueChange = { edited ->
+            field = edited
+            if (edited.text != value) onValueChange(edited.text)
+        },
         singleLine = true,
         textStyle = textStyle,
         cursorBrush = SolidColor(IndustryAccent),

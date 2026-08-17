@@ -195,6 +195,24 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
     }
 }
 
+/**
+ * The top bar's line while a search is showing, in the place the document's
+ * format and length would be. Kept to the count: the query itself is a tap on
+ * the magnifier away, and the bar has one line's room.
+ */
+private fun matchSummary(results: SearchResults): String {
+    // A scan publishes as it goes, so a count shown mid-scan is a floor rather
+    // than an answer, and says so.
+    val soFar = if (results.running) " SO FAR" else ""
+    return when {
+        results.hits.isEmpty() && results.running -> "SEARCHING"
+        results.hits.isEmpty() -> "NO MATCHES"
+        results.hits.size == 1 -> "1 MATCH$soFar"
+        results.truncated -> "${results.hits.size}+ MATCHES"
+        else -> "${results.hits.size} MATCHES$soFar"
+    }
+}
+
 @Composable
 private fun DocumentReader(
     state: ReaderState.Loaded,
@@ -207,6 +225,8 @@ private fun DocumentReader(
     var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val searchResults by viewModel.search.collectAsState()
+    // Held out here so it survives the panel being closed and opened again.
+    val searchListState = rememberLazyListState()
 
     // The design's chrome is transient: it starts visible and a tap on the page
     // takes it away, so a document can be read edge to edge.
@@ -222,8 +242,22 @@ private fun DocumentReader(
     // read, so it always gets them back.
     SystemBars(visible = chromeVisible || showSearch)
 
-    // Back closes search before it closes the document.
-    BackHandler(enabled = showSearch) { showSearch = false }
+    // Whether the page is being shown as a search result rather than plainly:
+    // marks on the words, and a bar that says so. Outlives the search screen,
+    // because landing on a hit is the point of running the search.
+    val searching = searchResults.query.length >= MIN_QUERY_LENGTH
+
+    /** Puts the document back the way it reads without a search over it. */
+    fun endSearch() {
+        query = ""
+        viewModel.clearSearch()
+    }
+
+    // Back leaves the search screen, then the search, then the document - one
+    // layer at a time, and the same order the top bar's arrow goes in.
+    BackHandler(enabled = showSearch || searching) {
+        if (showSearch) showSearch = false else endSearch()
+    }
 
     // The page the reader considers themselves on.
     val currentPage by remember {
@@ -301,7 +335,7 @@ private fun DocumentReader(
 
     // Identity of the marks a page should be showing. The hit count is in it
     // because a scan still running keeps finding more on pages already drawn.
-    val highlightKey = if (searchResults.query.length >= MIN_QUERY_LENGTH) {
+    val highlightKey = if (searching) {
         "${searchResults.query}/${searchResults.hits.size}"
     } else {
         ""
@@ -389,6 +423,9 @@ private fun DocumentReader(
                 // The gesture sits outside the scrolling box so its centroid
                 // arrives in viewport coordinates rather than content ones.
                 .pinchToZoom(
+                    // The search panel covers the page; touches on it are the
+                    // panel's alone.
+                    enabled = !showSearch,
                     onZoom = { scale, focus ->
                         gestureFocus = focus
                         gestureScale = (gestureScale * scale)
@@ -470,11 +507,21 @@ private fun DocumentReader(
         val zoomLabel = "${(zoom * gestureScale * 100).roundToInt()}%"
 
         ReaderTopBar(
-            title = state.title,
-            formatLabel = state.format.label,
-            pageCount = state.pageCount,
+            // The term goes in the title, where the document's name would be:
+            // what is on screen is this search, and the page is full of marks
+            // that only mean anything once you know what was looked for.
+            title = if (searching) "Search “${searchResults.query}”" else state.title,
+            // The document's own line, or the search's. Nothing about the
+            // document while its pages are marked: the bar describes what is
+            // on screen, and what is on screen is a result.
+            subtitle = if (searching) {
+                matchSummary(searchResults)
+            } else {
+                "${state.format.label} · ${state.pageCount} PP"
+            },
             hidden = chromeHidden,
-            onBack = onBack,
+            backLabel = if (searching) "Clear search" else "Back to library",
+            onBack = if (searching) ({ endSearch() }) else onBack,
             onSearch = { showSearch = true },
             modifier = Modifier.align(Alignment.TopCenter),
         )
@@ -505,9 +552,14 @@ private fun DocumentReader(
                 query = query,
                 results = searchResults,
                 textLayerLabel = state.format.textLayerLabel,
+                listState = searchListState,
                 onQueryChange = {
                     query = it
                     viewModel.search(it)
+                    // A new term means a new list, so it starts at the top.
+                    // Only here: the list is kept exactly where it was when the
+                    // panel merely closes and opens again.
+                    scope.launch { searchListState.scrollToItem(0) }
                 },
                 onClose = { showSearch = false },
                 onOpenHit = { hit ->
@@ -685,12 +737,19 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
  * The tap is recognised here rather than in a second `pointerInput` so that a
  * pinch, or a scroll that happens to end where it began, cannot also read as
  * one.
+ *
+ * [enabled] is how a panel laid over the page keeps the page out of its
+ * gestures. Nothing else can do it: this reads presses whether or not anything
+ * above has claimed them, which is what lets a page scroll and pinch at once,
+ * and means a tap on a panel would otherwise land on the page as well.
  */
 private fun Modifier.pinchToZoom(
+    enabled: Boolean,
     onZoom: (scale: Float, focus: Offset) -> Unit,
     onEnd: () -> Unit,
     onTap: () -> Unit,
-): Modifier = pointerInput(Unit) {
+): Modifier = pointerInput(enabled) {
+    if (!enabled) return@pointerInput
     awaitEachGesture {
         awaitFirstDown(requireUnconsumed = false)
         var zoomed = false

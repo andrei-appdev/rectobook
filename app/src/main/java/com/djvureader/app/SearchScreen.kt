@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.MaterialTheme
@@ -45,12 +46,18 @@ import com.djvureader.app.ui.theme.onSurfaceAlpha
  *
  * [results] arrive while the scan is still running, so the list fills as pages
  * are read rather than waiting for the last one.
+ *
+ * [listState] is the caller's, because this screen is torn down every time a
+ * hit is opened and built again on the way back. Reading a document by its
+ * matches means going down the list one at a time, and a list that returned to
+ * the top each time would make that impossible.
  */
 @Composable
 fun SearchScreen(
     query: String,
     results: SearchResults,
     textLayerLabel: String,
+    listState: LazyListState,
     onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
     onOpenHit: (SearchHit) -> Unit,
@@ -98,7 +105,7 @@ fun SearchScreen(
         }
         Hairline()
 
-        LazyColumn(modifier = Modifier.fillMaxSize()) {
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
             items(count = results.hits.size) { index ->
                 val hit = results.hits[index]
                 HitRow(hit = hit, onClick = { onOpenHit(hit) })
