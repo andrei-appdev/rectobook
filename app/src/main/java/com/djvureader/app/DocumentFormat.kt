@@ -15,16 +15,6 @@ enum class DocumentFormat {
             Pdf -> "PDF"
         }
 
-    /**
-     * What the text a document carries should be called. A scan's text is an
-     * OCR pass over a picture; a PDF's is usually the document's own.
-     */
-    val textLayerLabel: String
-        get() = when (this) {
-            Djvu -> "OCR LAYER"
-            Pdf -> "TEXT LAYER"
-        }
-
     companion object {
         /**
          * What [file] actually is, or null if it is neither format.

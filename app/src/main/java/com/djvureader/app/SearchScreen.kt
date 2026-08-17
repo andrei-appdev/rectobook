@@ -28,13 +28,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.djvureader.app.ui.theme.HeadingFont
 import com.djvureader.app.ui.theme.IndustryAccent
-import com.djvureader.app.ui.theme.IndustryAccent100
 import com.djvureader.app.ui.theme.IndustryAccent700
-import com.djvureader.app.ui.theme.IndustryAccent800
 import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.SectionLabel
 import com.djvureader.app.ui.theme.TabularNums
@@ -56,7 +53,6 @@ import com.djvureader.app.ui.theme.onSurfaceAlpha
 fun SearchScreen(
     query: String,
     results: SearchResults,
-    textLayerLabel: String,
     listState: LazyListState,
     onQueryChange: (String) -> Unit,
     onClose: () -> Unit,
@@ -89,20 +85,14 @@ fun SearchScreen(
         }
         Hairline()
 
-        Row(
+        Text(
+            text = statusLine(results),
+            style = SectionLabel,
+            color = onSurfaceAlpha(0.55f),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = statusLine(results),
-                style = SectionLabel,
-                color = onSurfaceAlpha(0.55f),
-            )
-            Tag(text = textLayerLabel)
-        }
+        )
         Hairline()
 
         LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
@@ -186,27 +176,6 @@ private fun snippet(hit: SearchHit): AnnotatedString = buildAnnotatedString {
         append(hit.term)
     }
     append(hit.after)
-}
-
-/** The design's `.tag.tag-accent`. */
-@Composable
-private fun Tag(text: String) {
-    Box(
-        modifier = Modifier
-            .background(IndustryAccent100)
-            .padding(horizontal = 10.dp, vertical = 3.dp),
-    ) {
-        Text(
-            text = text,
-            style = TextStyle(
-                fontFamily = HeadingFont,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp,
-                letterSpacing = 0.02.em,
-            ),
-            color = IndustryAccent800,
-        )
-    }
 }
 
 @Composable

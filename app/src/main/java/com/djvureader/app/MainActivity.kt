@@ -704,7 +704,6 @@ private fun DocumentReader(
             SearchScreen(
                 query = query,
                 results = searchResults,
-                textLayerLabel = state.format.textLayerLabel,
                 listState = searchListState,
                 onQueryChange = {
                     query = it
