@@ -52,6 +52,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.withFrameNanos
@@ -254,11 +255,20 @@ private fun DocumentReader(
     // Zooming widens the content rather than scaling the list: pages are
     // re-rendered at the new width, so they stay sharp and the list keeps
     // correct scroll extents.
-    var zoom by remember { mutableFloatStateOf(MIN_ZOOM) }
+    //
+    // Saved across a configuration change, because the scale is the reader's
+    // choice rather than a property of the window. It is a multiple of
+    // fit-to-width, so the same number goes on meaning the same thing when the
+    // screen turns and the width it multiplies changes.
+    var zoom by rememberSaveable { mutableStateOf(MIN_ZOOM) }
     // Pages lay out at `zoom` immediately but are re-rendered only at
     // `renderZoom`. A pinch changes zoom every frame, and re-rendering on
     // each one would cancel the previous decode over and over.
-    var renderZoom by remember { mutableFloatStateOf(MIN_ZOOM) }
+    //
+    // Saved alongside `zoom`, so a rotation re-renders pages straight at the
+    // restored scale instead of showing them at fit-width until the settle
+    // delay catches up.
+    var renderZoom by rememberSaveable { mutableStateOf(MIN_ZOOM) }
     // Live pinch state: scale applied on the GPU until the fingers lift.
     var gestureScale by remember { mutableFloatStateOf(1f) }
     var gestureFocus by remember { mutableStateOf(Offset.Zero) }
