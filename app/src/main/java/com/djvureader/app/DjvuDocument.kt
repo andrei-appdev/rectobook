@@ -109,6 +109,51 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
         return nearest
     }
 
+    /**
+     * The page's hyperlinks, from its annotation chunk.
+     *
+     * Link coordinates need the page's rotation and the hidden text's do not.
+     * ddjvuapi says so itself, under a "[brain damage warning]": maparea
+     * coordinates are relative to the rotated page while the text is relative
+     * to the unrotated one. So this cannot share the flip [textRects] uses.
+     */
+    override fun links(pageNumber: Int): List<PageLink> {
+        checkOpen()
+        val packed = DjvuNative.nativeGetPageLinks(handle, pageNumber) ?: return emptyList()
+        val buffer = ByteBuffer.wrap(packed).order(ByteOrder.BIG_ENDIAN)
+        if (buffer.remaining() < Int.SIZE_BYTES) return emptyList()
+        val rotation = buffer.int
+
+        val size = pageSize(pageNumber) ?: return emptyList()
+        if (size.width <= 0 || size.height <= 0) return emptyList()
+        // A quarter turn either way puts the page on its side, so the frame the
+        // link was measured in is the page's own dimensions swapped.
+        val quarterTurned = rotation == 1 || rotation == 3
+        val frameWidth = (if (quarterTurned) size.height else size.width).toFloat()
+        val frameHeight = (if (quarterTurned) size.width else size.height).toFloat()
+
+        val links = mutableListOf<PageLink>()
+        while (buffer.remaining() >= LINK_HEADER_BYTES) {
+            val left = buffer.int
+            val bottom = buffer.int
+            val right = buffer.int
+            val top = buffer.int
+            val length = buffer.int
+            if (length < 0 || length > buffer.remaining()) break
+            val target = ByteArray(length).also(buffer::get).toString(Charsets.UTF_8)
+
+            val bounds = PageRect(
+                left = left / frameWidth,
+                // Bottom-left origin, as everywhere else in a DjVu.
+                top = 1f - top / frameHeight,
+                right = right / frameWidth,
+                bottom = 1f - bottom / frameHeight,
+            )
+            linkTarget(target)?.let { links += PageLink(bounds, it) }
+        }
+        return links
+    }
+
     /** One word of hidden text, boxed in the page's own bottom-left pixels. */
     private class Word(
         val text: String,
@@ -191,6 +236,28 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
     companion object {
         /** Four box edges and a length, per word. */
         private const val WORD_HEADER_BYTES = 5 * Int.SIZE_BYTES
+
+        /** The same four edges and a length, per link. */
+        private const val LINK_HEADER_BYTES = 5 * Int.SIZE_BYTES
+
+        /**
+         * Reads a maparea's target.
+         *
+         * DjVu writes an internal jump as a fragment: `#7` for the seventh
+         * page, or `#name` for a page named in the document's directory. Page
+         * numbers here count from 1, as they do to a reader; everything below
+         * this counts from 0.
+         *
+         * A named target is not resolved. Doing it properly means reading the
+         * document directory, and a name that cannot be looked up would jump
+         * somewhere arbitrary, which is worse than a link that does nothing.
+         */
+        private fun linkTarget(target: String): LinkTarget? {
+            if (target.isBlank()) return null
+            if (!target.startsWith("#")) return LinkTarget.Url(target)
+            val page = target.removePrefix("#").toIntOrNull() ?: return null
+            return if (page >= 1) LinkTarget.Page(page - 1) else null
+        }
 
         /**
          * How much dearer a miss up or down is than one along the line. Lines

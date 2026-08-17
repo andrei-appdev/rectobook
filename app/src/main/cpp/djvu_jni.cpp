@@ -11,8 +11,11 @@
 #include <android/bitmap.h>
 #include <android/log.h>
 
+#include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include "djvulibre/libdjvu/ddjvuapi.h"
 #include "djvulibre/libdjvu/miniexp.h"
@@ -131,6 +134,99 @@ void releaseDocument(Document *doc) {
     delete doc;
 }
 
+// The target of a `(maparea ...)`, which is either a bare string or a
+// `(url "target" "hint")` form. Returns null for anything else, including the
+// empty target a decorative area carries.
+const char *mapareaTarget(miniexp_t area) {
+    miniexp_t url = miniexp_car(miniexp_cdr(area));
+    if (miniexp_stringp(url)) {
+        return miniexp_to_str(url);
+    }
+    if (miniexp_consp(url) && miniexp_symbolp(miniexp_car(url))) {
+        const char *name = miniexp_to_name(miniexp_car(url));
+        if (name && std::strcmp(name, "url") == 0) {
+            miniexp_t target = miniexp_car(miniexp_cdr(url));
+            if (miniexp_stringp(target)) {
+                return miniexp_to_str(target);
+            }
+        }
+    }
+    return nullptr;
+}
+
+// The bounding box of a maparea's shape, as {xmin, ymin, xmax, ymax} in the
+// page's own pixels.
+//
+// DjVu allows rectangles, ovals and polygons. A reader only needs somewhere to
+// aim a finger, so every shape is reduced to the box around it - a polygon
+// hyperlink is rare, and a slightly generous target for one is better than
+// ignoring it.
+bool mapareaBox(miniexp_t area, int box[4]) {
+    // (maparea url comment shape rest...) - so the shape is the fourth
+    // element, past the comment. Searched for rather than indexed, because
+    // what follows it varies and a list is cheap to walk.
+    miniexp_t shape = miniexp_nil;
+    const char *name = nullptr;
+    for (miniexp_t rest = miniexp_cddr(area); miniexp_consp(rest); rest = miniexp_cdr(rest)) {
+        miniexp_t candidate = miniexp_car(rest);
+        if (!miniexp_consp(candidate) || !miniexp_symbolp(miniexp_car(candidate))) {
+            continue;
+        }
+        const char *head = miniexp_to_name(miniexp_car(candidate));
+        if (!head) {
+            continue;
+        }
+        if (std::strcmp(head, "rect") == 0 || std::strcmp(head, "oval") == 0 ||
+            std::strcmp(head, "text") == 0 || std::strcmp(head, "poly") == 0 ||
+            std::strcmp(head, "line") == 0) {
+            shape = candidate;
+            name = head;
+            break;
+        }
+    }
+    if (!name) {
+        return false;
+    }
+
+    std::vector<int> values;
+    for (miniexp_t rest = miniexp_cdr(shape); miniexp_consp(rest); rest = miniexp_cdr(rest)) {
+        miniexp_t value = miniexp_car(rest);
+        if (!miniexp_numberp(value)) {
+            break;
+        }
+        values.push_back(miniexp_to_int(value));
+    }
+    if (values.size() < 4) {
+        return false;
+    }
+
+    // rect, oval and text are all x, y, width, height.
+    if (std::strcmp(name, "rect") == 0 || std::strcmp(name, "oval") == 0 ||
+        std::strcmp(name, "text") == 0) {
+        box[0] = values[0];
+        box[1] = values[1];
+        box[2] = values[0] + values[2];
+        box[3] = values[1] + values[3];
+        return true;
+    }
+    // poly and line are a run of x, y pairs.
+    if (std::strcmp(name, "poly") == 0 || std::strcmp(name, "line") == 0) {
+        int xmin = values[0], xmax = values[0], ymin = values[1], ymax = values[1];
+        for (size_t i = 0; i + 1 < values.size(); i += 2) {
+            xmin = std::min(xmin, values[i]);
+            xmax = std::max(xmax, values[i]);
+            ymin = std::min(ymin, values[i + 1]);
+            ymax = std::max(ymax, values[i + 1]);
+        }
+        box[0] = xmin;
+        box[1] = ymin;
+        box[2] = xmax;
+        box[3] = ymax;
+        return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 extern "C" {
@@ -224,6 +320,79 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageInfo(JNIEnv *env, jobject, jlong
 // Bytes rather than a jstring: NewStringUTF wants Java's modified UTF-8, which
 // differs from real UTF-8 above the BMP, and this text comes from an OCR engine
 // we do not control. Kotlin decodes it properly.
+// Returns a page's hyperlinks, packed as:
+//
+//   rotation, then per link: xmin, ymin, xmax, ymax, targetLength, target bytes
+//
+// all integers big-endian, matching nativeGetPageWords.
+//
+// The rotation leads because link coordinates need it and text coordinates do
+// not. ddjvuapi says so itself, under a "[brain damage warning]": maparea
+// coordinates are relative to the rotated page while the hidden text is
+// relative to the unrotated one. Kotlin does the mapping, where the page's
+// size is already known.
+JNIEXPORT jbyteArray JNICALL
+Java_com_djvureader_app_DjvuNative_nativeGetPageLinks(JNIEnv *env, jobject, jlong handle,
+                                                     jint pageNumber) {
+    Document *doc = asDocument(handle);
+    if (!doc || !doc->document) {
+        return nullptr;
+    }
+
+    ddjvu_pageinfo_t info;
+    ddjvu_status_t status;
+    while ((status = ddjvu_document_get_pageinfo(doc->document, pageNumber, &info)) <
+           DDJVU_JOB_OK) {
+        drainMessages(doc->context, /*wait=*/true);
+    }
+    if (status >= DDJVU_JOB_FAILED) {
+        return nullptr;
+    }
+
+    miniexp_t anno;
+    while ((anno = ddjvu_document_get_pageanno(doc->document, pageNumber)) == miniexp_dummy) {
+        drainMessages(doc->context, /*wait=*/true);
+    }
+
+    std::string collected;
+    appendInt(collected, info.rotation);
+
+    if (miniexp_consp(anno)) {
+        // Zero-terminated, and malloc'd by the library for us to free. The
+        // expressions it points at belong to the annotations, so they stay
+        // valid until those are released.
+        miniexp_t *areas = ddjvu_anno_get_hyperlinks(anno);
+        if (areas) {
+            for (miniexp_t *area = areas; *area; ++area) {
+                int box[4];
+                const char *target = mapareaTarget(*area);
+                if (!target || !*target || !mapareaBox(*area, box)) {
+                    continue;
+                }
+                for (int edge : box) {
+                    appendInt(collected, edge);
+                }
+                const auto length = static_cast<int>(std::strlen(target));
+                appendInt(collected, length);
+                collected.append(target, length);
+            }
+            free(areas);
+        }
+        ddjvu_miniexp_release(doc->document, anno);
+    }
+
+    const auto size = static_cast<jsize>(collected.size());
+    jbyteArray result = env->NewByteArray(size);
+    if (!result) {
+        return nullptr;
+    }
+    if (size > 0) {
+        env->SetByteArrayRegion(result, 0, size,
+                                reinterpret_cast<const jbyte *>(collected.data()));
+    }
+    return result;
+}
+
 JNIEXPORT jbyteArray JNICALL
 Java_com_djvureader_app_DjvuNative_nativeGetPageWords(JNIEnv *env, jobject, jlong handle,
                                                      jint pageNumber) {

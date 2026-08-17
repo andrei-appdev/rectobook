@@ -170,6 +170,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         title = ""
         _pageSizes.clear()
         pageTextCache.clear()
+        linkCache.clear()
+        clearSelection()
         _state.value = ReaderState.Empty
         viewModelScope.launch(Dispatchers.IO) {
             documentLock.withLock {
@@ -209,7 +211,9 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private fun openWith(key: String, load: () -> LocalDocument) {
         openJob?.cancel()
         clearSearch()
+        clearSelection()
         pageTextCache.clear()
+        linkCache.clear()
         // Opening a document again - even the same one - resumes it again.
         restoredKey = null
         _state.value = ReaderState.Loading
@@ -363,6 +367,24 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         // Not while the scan is still running: this page may yet gain matches.
         if (!results.running) highlightCache[pageNumber] = rects
         return rects
+    }
+
+    /**
+     * A page's links, worked out once and kept.
+     *
+     * Unlike selection marks, these never change while a document is open, and
+     * every page that is drawn asks for them - so they are cached, and pages
+     * with none cache the empty answer rather than asking again on each scroll.
+     */
+    private val linkCache = ConcurrentHashMap<Int, List<PageLink>>()
+
+    suspend fun links(pageNumber: Int): List<PageLink> {
+        linkCache[pageNumber]?.let { return it }
+        val links = withContext(Dispatchers.IO) {
+            documentLock.withLock { document?.links(pageNumber).orEmpty() }
+        }
+        linkCache[pageNumber] = links
+        return links
     }
 
     private val _selection = MutableStateFlow<TextSelection?>(null)

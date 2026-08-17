@@ -3,6 +3,7 @@ package com.djvureader.app
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -80,6 +81,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
@@ -143,6 +145,9 @@ private val HandleHeight = 14.dp
  * mark is deliberately small and a fingertip is not.
  */
 private val HandleReach = 28.dp
+
+/** The rule drawn under a hyperlink. The design's hairline, in accent. */
+private val LinkRule = 1.5.dp
 
 /** The copy block, sized like the go-to sheet's JUMP. */
 private val CopyBlockWidth = 92.dp
@@ -278,6 +283,8 @@ private fun DocumentReader(
 
     val selection by viewModel.selection.collectAsState()
     val clipboard = LocalClipboardManager.current
+    // A link pressed but not yet followed, held while it is shown to the reader.
+    var pendingUrl by remember { mutableStateOf<String?>(null) }
 
     /** Puts the selection on the clipboard and lets it go. */
     fun copySelection() {
@@ -466,6 +473,53 @@ private fun DocumentReader(
         scope.launch { listState.scrollToItem((page - 1).coerceIn(0, state.pageCount - 1)) }
     }
 
+    /**
+     * Follows the link under [point], or runs [otherwise] if there is none.
+     *
+     * The tap is in viewport coordinates and the pages are items in a list, so
+     * finding what was pressed means asking the list which item covers that
+     * height and where within it the point falls. Doing it here rather than on
+     * each page is what lets a tap on nothing still reach the chrome: the page
+     * cannot report a miss without also claiming the press.
+     */
+    fun followLinkOr(point: Offset, otherwise: () -> Unit) {
+        val info = listState.layoutInfo
+        // Item offsets are measured from the start of the content, the tap from
+        // the top of the viewport, and the list's top padding separates the
+        // two. Same correction the zoom anchoring makes.
+        val padding = info.beforeContentPadding
+        val item = info.visibleItemsInfo.firstOrNull { item ->
+            val top = item.offset + padding
+            point.y >= top && point.y < top + item.size
+        }
+        val width = viewport.width * zoom
+        if (item == null || item.size <= 0 || width <= 0f) {
+            otherwise()
+            return
+        }
+
+        // Across, the pages sit in a horizontally scrolled strip, so the page's
+        // own left edge is however far that strip has been dragged.
+        val x = (point.x + horizontalScroll.value) / width
+        val y = (point.y - (item.offset + padding)) / item.size
+        if (x !in 0f..1f) {
+            otherwise()
+            return
+        }
+
+        scope.launch {
+            val link = viewModel.links(item.index).firstOrNull { it.bounds.contains(x, y) }
+            when (val target = link?.target) {
+                null -> otherwise()
+                is LinkTarget.Page -> goToPage(target.pageNumber + 1)
+                // Never opened straight away. A link in a document is written
+                // by whoever made the document, and where it goes is worth
+                // seeing before going there.
+                is LinkTarget.Url -> pendingUrl = target.url
+            }
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Box(
             modifier = Modifier
@@ -491,7 +545,7 @@ private fun DocumentReader(
                         gestureScale = 1f
                         zoomAbout(committed, gestureFocus)
                     },
-                    onTap = { chromeVisible = !chromeVisible },
+                    onTap = { point -> followLinkOr(point) { chromeVisible = !chromeVisible } },
                 )
                 // A tap puts the selection down, wherever on the reader it
                 // falls - the page it was made on, another page, or the space
@@ -641,6 +695,25 @@ private fun DocumentReader(
         }
     }
 
+    pendingUrl?.let { url ->
+        val context = LocalContext.current
+        OpenLinkSheet(
+            url = url,
+            onDismiss = { pendingUrl = null },
+            onOpen = {
+                pendingUrl = null
+                // Nothing guarantees anything is installed that handles the
+                // scheme, and a document can carry any scheme it likes.
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    )
+                }
+            },
+        )
+    }
+
     if (showGoToSheet) {
         GoToPageSheet(
             pageCount = state.pageCount,
@@ -703,6 +776,12 @@ private fun PageView(
         viewModel.cachedPage(pageNumber)?.let { if (bitmap == null) bitmap = it }
         val rendered = viewModel.renderPage(pageNumber, renderWidth)
         if (rendered != null) bitmap = rendered
+    }
+
+    // A page's links never change while the document is open, so this is asked
+    // once per page and answered from the view model's cache thereafter.
+    val links by produceState(emptyList<PageLink>(), pageNumber) {
+        value = viewModel.links(pageNumber)
     }
 
     // Where this page's search matches are, asked for only while a search is
@@ -795,6 +874,26 @@ private fun PageView(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
             )
+        }
+
+        // A link is invisible in the page's own picture, so it is ruled under.
+        // A rule rather than a wash: the design marks things with rules, and a
+        // link that covers a whole paragraph - which they often do - would
+        // otherwise flood it with colour.
+        if (links.isNotEmpty()) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                links.forEach { link ->
+                    val foot = link.bounds.bottom * size.height
+                    drawRect(
+                        color = IndustryAccent.copy(alpha = 0.55f),
+                        topLeft = Offset(link.bounds.left * size.width, foot - LinkRule.toPx()),
+                        size = Size(
+                            (link.bounds.right - link.bounds.left) * size.width,
+                            LinkRule.toPx(),
+                        ),
+                    )
+                }
+            }
         }
 
         // Drawn over the page rather than into it, so a mark costs nothing to
@@ -953,7 +1052,8 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
  * Reports pinch scale changes and the point they are centred on, without
  * consuming single-pointer drags, so the page list keeps scrolling vertically
  * while pinch still zooms. A press that neither zooms nor travels is reported
- * as a tap, which is how the design toggles the chrome.
+ * as a tap, reported with where it landed - the design toggles the chrome on
+ * one, and a tap that finds a link follows it instead.
  *
  * The tap is recognised here rather than in a second `pointerInput` so that a
  * pinch, or a scroll that happens to end where it began, cannot also read as
@@ -968,11 +1068,11 @@ private fun Modifier.pinchToZoom(
     enabled: Boolean,
     onZoom: (scale: Float, focus: Offset) -> Unit,
     onEnd: () -> Unit,
-    onTap: () -> Unit,
+    onTap: (Offset) -> Unit,
 ): Modifier = pointerInput(enabled) {
     if (!enabled) return@pointerInput
     awaitEachGesture {
-        awaitFirstDown(requireUnconsumed = false)
+        val down = awaitFirstDown(requireUnconsumed = false)
         var zoomed = false
         var multiTouch = false
         var travel = 0f
@@ -995,7 +1095,7 @@ private fun Modifier.pinchToZoom(
         }
         when {
             zoomed -> onEnd()
-            !multiTouch && travel < viewConfiguration.touchSlop -> onTap()
+            !multiTouch && travel < viewConfiguration.touchSlop -> onTap(down.position)
         }
     }
 }

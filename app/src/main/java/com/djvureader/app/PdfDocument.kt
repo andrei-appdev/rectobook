@@ -174,6 +174,39 @@ class PdfDocument private constructor(
         }.getOrNull()
     }
 
+    /**
+     * PDFium reads the page's link annotations itself, and resolves an internal
+     * destination to a page index for us. A link carries one or the other -
+     * a page to go to, or a URI to hand on.
+     */
+    override fun links(pageNumber: Int): List<PageLink> = locked {
+        if (closed) return@locked emptyList()
+        runCatching {
+            document.openPage(pageNumber).use { page ->
+                val width = page.getPageWidthPoint().toFloat()
+                val height = page.getPageHeightPoint().toFloat()
+                if (width <= 0f || height <= 0f) return@use emptyList()
+
+                page.getPageLinks().mapNotNull { link ->
+                    val target = link.destPageIdx?.let { LinkTarget.Page(it) }
+                        ?: link.uri?.takeIf { it.isNotBlank() }?.let { LinkTarget.Url(it) }
+                        ?: return@mapNotNull null
+                    PageLink(
+                        bounds = PageRect(
+                            left = link.bounds.left / width,
+                            // Measured from the foot of the page, as everything
+                            // in a PDF is.
+                            top = 1f - link.bounds.top / height,
+                            right = link.bounds.right / width,
+                            bottom = 1f - link.bounds.bottom / height,
+                        ),
+                        target = target,
+                    )
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
     override fun close() = locked {
         if (!closed) {
             closed = true

@@ -22,7 +22,11 @@ data class PageRect(
     val top: Float,
     val right: Float,
     val bottom: Float,
-)
+) {
+    /** Whether ([x], [y]), in the same fractions, falls inside this. */
+    fun contains(x: Float, y: Float): Boolean =
+        x >= left && x <= right && y >= top && y <= bottom
+}
 
 /**
  * A document the reader can show: a fixed number of pages, each with a size, a
@@ -100,7 +104,29 @@ interface PagedDocument : Closeable {
      * themselves.
      */
     fun charAt(pageNumber: Int, x: Float, y: Float): Int?
+
+    /**
+     * The page's hyperlinks: somewhere on the page, and something to do when it
+     * is pressed.
+     *
+     * Empty for most pages. Links live in a document's own structure rather
+     * than in its picture, so a scan has them only where the producer put them
+     * - a table of contents, an index, a cross-reference.
+     */
+    fun links(pageNumber: Int): List<PageLink>
 }
+
+/** Where a link goes. */
+sealed interface LinkTarget {
+    /** Another page of this document, numbered from 0. */
+    data class Page(val pageNumber: Int) : LinkTarget
+
+    /** Somewhere outside it, to be handed to the system. */
+    data class Url(val url: String) : LinkTarget
+}
+
+/** A hyperlink, boxed on the page as fractions of it. */
+data class PageLink(val bounds: PageRect, val target: LinkTarget)
 
 /**
  * The whole word around [index], as a range into [text], or null if [index]

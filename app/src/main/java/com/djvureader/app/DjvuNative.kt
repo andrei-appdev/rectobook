@@ -39,6 +39,16 @@ internal object DjvuNative {
     external fun nativeGetPageWords(handle: Long, pageNumber: Int): ByteArray?
 
     /**
+     * A page's hyperlinks, or null if the page could not be read.
+     *
+     * Encoded as the page's rotation, then per link four big-endian ints for
+     * the box, a byte count and that many UTF-8 bytes of target. The rotation
+     * leads because link coordinates are measured in the rotated page while the
+     * hidden text is measured in the unrotated one.
+     */
+    external fun nativeGetPageLinks(handle: Long, pageNumber: Int): ByteArray?
+
+    /**
      * Renders part of [pageNumber] into [bitmap], which must be ARGB_8888.
      *
      * The page is scaled to [pageWidth] x [pageHeight]; the region of that
