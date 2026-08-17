@@ -210,6 +210,7 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
                 onPick = openDocument,
                 onAbout = { showAbout = true },
                 onOpenRecent = viewModel::openRecent,
+                onRemoveRecent = viewModel::removeRecent,
             )
 
             if (showAbout) {

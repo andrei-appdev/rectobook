@@ -71,6 +71,14 @@ class LibraryStore(private val context: Context) {
         }
     }
 
+    /** Drops a document from the list. The file itself is not touched. */
+    suspend fun remove(key: String) {
+        context.libraryDataStore.edit { preferences ->
+            val remaining = decode(preferences[RECENTS_KEY]).filterNot { it.key == key }
+            preferences[RECENTS_KEY] = encode(remaining)
+        }
+    }
+
     suspend fun saveProgress(key: String, page: Int) {
         context.libraryDataStore.edit { preferences ->
             val updated = decode(preferences[RECENTS_KEY]).map { entry ->

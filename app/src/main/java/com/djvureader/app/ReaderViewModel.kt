@@ -159,6 +159,31 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     fun openRecent(recent: RecentDocument) = openUri(Uri.parse(recent.key))
 
     /**
+     * Forgets a document: the list entry, its thumbnail, and the read grant
+     * taken when it was opened.
+     *
+     * The file itself is left alone - this list is a record of what has been
+     * read, not the documents themselves. The grant is given back because an
+     * app may hold only so many, and one for a document no longer listed can
+     * never be used again.
+     */
+    fun removeRecent(recent: RecentDocument) {
+        thumbnails.remove(recent.thumbnailKey)
+        thumbnailsRequested.remove(recent.thumbnailKey)
+        viewModelScope.launch {
+            library.remove(recent.key)
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    getApplication<Application>().contentResolver.releasePersistableUriPermission(
+                        Uri.parse(recent.key),
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                    )
+                }
+            }
+        }
+    }
+
+    /**
      * Closes the open document and returns to the library. The native handle is
      * released under [documentLock] so a render still in flight finishes first.
      */

@@ -1,11 +1,15 @@
 package com.djvureader.app
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +21,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +29,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -33,16 +43,21 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.djvureader.app.ui.theme.IndustryAccent
 import com.djvureader.app.ui.theme.IndustryAccent700
+import com.djvureader.app.ui.theme.IndustryBackground
 import com.djvureader.app.ui.theme.IndustryDivider
 import com.djvureader.app.ui.theme.SectionLabel
 import com.djvureader.app.ui.theme.TabularNums
 import com.djvureader.app.ui.theme.onSurfaceAlpha
 import java.util.Locale
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * The library, styled after the design's first screen: wordmark, a single
@@ -61,6 +76,7 @@ fun LibraryScreen(
     onPick: () -> Unit,
     onAbout: () -> Unit,
     onOpenRecent: (RecentDocument) -> Unit,
+    onRemoveRecent: (RecentDocument) -> Unit,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
@@ -109,17 +125,113 @@ fun LibraryScreen(
             }
             items(count = recents.size, key = { recents[it].key }) { index ->
                 val document = recents[index]
-                RecentCard(
-                    document = document,
-                    thumbnail = thumbnail(document),
-                    onRequestThumbnail = onRequestThumbnail,
-                    onClick = { onOpenRecent(document) },
+                SwipeToRemove(
+                    // Keyed on the document, so a card that slides away cannot
+                    // leave the next one to reuse its slot half off screen.
+                    key = document.key,
+                    onRemove = { onRemoveRecent(document) },
                     modifier = Modifier.padding(bottom = 13.dp),
-                )
+                ) {
+                    RecentCard(
+                        document = document,
+                        thumbnail = thumbnail(document),
+                        onRequestThumbnail = onRequestThumbnail,
+                        onClick = { onOpenRecent(document) },
+                    )
+                }
             }
         }
     }
 }
+
+/**
+ * Drag a card to the left to forget it.
+ *
+ * Written out rather than taken from Material's dismiss box, which brings its
+ * own thresholds and its own idea of what the gesture should look like. What is
+ * revealed underneath is the design's own: a rule of accent with REMOVE on it,
+ * uncovered as the card moves off it.
+ *
+ * Only leftwards. A card can be pulled a little to the right and springs back,
+ * which is what tells a hand that the gesture exists without doing anything.
+ */
+@Composable
+private fun SwipeToRemove(
+    key: Any,
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    val offset = remember(key) { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var width by remember(key) { mutableStateOf(0) }
+    val rightwardGive = with(LocalDensity.current) { RightwardGive.toPx() }
+
+    Box(modifier = modifier.onSizeChanged { width = it.width }) {
+        // Only worth drawing once something is behind the card to see.
+        if (offset.value < 0f) {
+            Row(
+                modifier = Modifier
+                    .matchParentSize()
+                    .background(IndustryAccent),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "REMOVE",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = IndustryBackground,
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                )
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .offset { IntOffset(offset.value.roundToInt(), 0) }
+                // A card is a bordered box with nothing behind it, which is
+                // right against the screen and wrong against this: without a
+                // ground of its own the accent shows straight through it.
+                .background(IndustryBackground)
+                .draggable(
+                    orientation = Orientation.Horizontal,
+                    state = rememberDraggableState { delta ->
+                        scope.launch {
+                            // Rightwards travel stops short rather than being
+                            // refused: the card gives a little and springs
+                            // back, which says the gesture exists without
+                            // suggesting it does anything that way.
+                            offset.snapTo((offset.value + delta).coerceAtMost(rightwardGive))
+                        }
+                    },
+                    onDragStopped = { velocity ->
+                        val far = width > 0 && -offset.value > width * REMOVE_FRACTION
+                        val fast = velocity < -REMOVE_VELOCITY
+                        if (width > 0 && (far || fast)) {
+                            // All the way off before it is forgotten, so the
+                            // list closes the gap after the card has gone
+                            // rather than under it.
+                            offset.animateTo(-width.toFloat())
+                            onRemove()
+                        } else {
+                            offset.animateTo(0f)
+                        }
+                    },
+                ),
+        ) {
+            content()
+        }
+    }
+}
+
+/** How much of a card's width must be dragged away for it to go. */
+private const val REMOVE_FRACTION = 0.4f
+
+/** A flick past this, in pixels per second, removes whatever the distance. */
+private const val REMOVE_VELOCITY = 1200f
+
+/** How far a rightward pull travels before it stops. */
+private val RightwardGive = 16.dp
 
 @Composable
 private fun RecentCard(
