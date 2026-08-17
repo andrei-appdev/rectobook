@@ -365,6 +365,82 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         return rects
     }
 
+    private val _selection = MutableStateFlow<TextSelection?>(null)
+
+    /** The text currently picked out on a page, or null if none is. */
+    val selection: StateFlow<TextSelection?> = _selection.asStateFlow()
+
+    /**
+     * Selects the word at ([x], [y]) on [pageNumber], both fractions of the
+     * page. Returns whether anything was there to select.
+     */
+    suspend fun selectWordAt(pageNumber: Int, x: Float, y: Float): Boolean {
+        val picked = wordAt(pageNumber, x, y) ?: return false
+        _selection.value = TextSelection(
+            page = pageNumber,
+            anchor = picked,
+            start = picked.first,
+            end = picked.last + 1,
+        )
+        return true
+    }
+
+    /**
+     * Drags one end of the selection to ([x], [y]).
+     *
+     * The other end stays where the selection was first made, so dragging back
+     * past it turns the selection round rather than emptying it - which is what
+     * a hand does when it overshoots.
+     */
+    suspend fun extendSelectionTo(x: Float, y: Float) {
+        val current = _selection.value ?: return
+        val picked = wordAt(current.page, x, y) ?: return
+        val anchor = current.anchor
+        _selection.value = current.copy(
+            start = minOf(anchor.first, picked.first),
+            end = maxOf(anchor.last, picked.last) + 1,
+        )
+    }
+
+    fun clearSelection() {
+        _selection.value = null
+    }
+
+    /** The word at a point, as a range into the page's text. */
+    private suspend fun wordAt(pageNumber: Int, x: Float, y: Float): IntRange? {
+        val text = pageText(pageNumber) ?: return null
+        if (text.isEmpty()) return null
+        val index = withContext(Dispatchers.IO) {
+            documentLock.withLock { document?.charAt(pageNumber, x, y) }
+        } ?: return null
+        return wordAround(text, index.coerceIn(0, text.length - 1))
+    }
+
+    /**
+     * Where the selection sits on [pageNumber], as fractions of the page.
+     *
+     * Not cached, unlike search marks: a selection changes with every drag
+     * event, so there would never be a second reader for a cached answer.
+     */
+    suspend fun selectionRects(pageNumber: Int): List<PageRect> {
+        val current = _selection.value ?: return emptyList()
+        if (current.page != pageNumber || current.isEmpty) return emptyList()
+        return withContext(Dispatchers.IO) {
+            documentLock.withLock {
+                document?.textRects(pageNumber, current.start, current.end).orEmpty()
+            }
+        }
+    }
+
+    /** What is selected, ready for the clipboard, or null if nothing is. */
+    suspend fun selectedText(): String? {
+        val current = _selection.value ?: return null
+        val text = pageText(current.page) ?: return null
+        if (current.start >= text.length) return null
+        return text.substring(current.start, current.end.coerceAtMost(text.length))
+            .takeIf { it.isNotBlank() }
+    }
+
     /**
      * A page's hidden text, from the cache when possible.
      *

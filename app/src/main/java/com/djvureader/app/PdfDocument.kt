@@ -147,6 +147,33 @@ class PdfDocument private constructor(
         }.getOrDefault(emptyList())
     }
 
+    /**
+     * The character under the point. PDFium answers this itself, in the page's
+     * own points, and takes a tolerance for a finger that lands beside the
+     * glyph rather than on it.
+     */
+    override fun charAt(pageNumber: Int, x: Float, y: Float): Int? = locked {
+        if (closed) return@locked null
+        runCatching {
+            document.openPage(pageNumber).use { page ->
+                val width = page.getPageWidthPoint().toDouble()
+                val height = page.getPageHeightPoint().toDouble()
+                if (width <= 0 || height <= 0) return@use null
+
+                document.openTextPage(page).use { text ->
+                    val index = text.textPageGetCharIndexAtPos(
+                        x * width,
+                        // Back to the bottom-left origin a PDF is measured in.
+                        (1f - y) * height,
+                        width * TOUCH_TOLERANCE,
+                        height * TOUCH_TOLERANCE,
+                    )
+                    index.takeIf { it >= 0 }
+                }
+            }
+        }.getOrNull()
+    }
+
     override fun close() = locked {
         if (!closed) {
             closed = true
@@ -161,6 +188,12 @@ class PdfDocument private constructor(
     companion object {
         /** A PDF is measured in points, 72 to the inch, by definition. */
         private const val POINTS_PER_INCH = 72
+
+        /**
+         * How far from a glyph a touch still counts, as a fraction of the page.
+         * A fingertip covers a good deal more of a page than a character does.
+         */
+        private const val TOUCH_TOLERANCE = 0.01
 
         /**
          * Opens [file] as a PDF, throwing [IOException] with something worth

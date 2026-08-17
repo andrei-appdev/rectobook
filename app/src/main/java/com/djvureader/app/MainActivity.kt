@@ -17,20 +17,28 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -54,6 +62,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -66,12 +75,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.view.WindowCompat
@@ -80,15 +95,17 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.djvureader.app.ui.theme.DjvuTheme
 import com.djvureader.app.ui.theme.IndustryAccent
+import com.djvureader.app.ui.theme.IndustryBackground
+import com.djvureader.app.ui.theme.IndustryDivider
 import com.djvureader.app.ui.theme.IndustryNeutral200
 import com.djvureader.app.ui.theme.TabularNums
 import com.djvureader.app.ui.theme.onSurfaceAlpha
+import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlin.math.roundToInt
 
 /** Zoom is expressed as a multiple of fit-to-width. */
 private const val MIN_ZOOM = 1f
@@ -113,6 +130,23 @@ private val PAGE_GAP = 2.dp
 /** The design's `transition: transform .22s cubic-bezier(.3,.7,.2,1)`. */
 private const val CHROME_SLIDE_MS = 220
 private val ChromeEasing = CubicBezierEasing(0.3f, 0.7f, 0.2f, 1f)
+
+/**
+ * The caliper marking each end of a selection - the same square mark the page
+ * slider rides, rather than the teardrop Android draws.
+ */
+private val HandleWidth = 3.dp
+private val HandleHeight = 14.dp
+
+/**
+ * How near an end a finger must land to take hold of it. Generous, because the
+ * mark is deliberately small and a fingertip is not.
+ */
+private val HandleReach = 28.dp
+
+/** The copy block, sized like the go-to sheet's JUMP. */
+private val CopyBlockWidth = 92.dp
+private val CopyBlockHeight = 34.dp
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -242,6 +276,18 @@ private fun DocumentReader(
     // read, so it always gets them back.
     SystemBars(visible = chromeVisible || showSearch)
 
+    val selection by viewModel.selection.collectAsState()
+    val clipboard = LocalClipboardManager.current
+
+    /** Puts the selection on the clipboard and lets it go. */
+    fun copySelection() {
+        scope.launch {
+            val text = viewModel.selectedText()
+            if (text != null) clipboard.setText(AnnotatedString(text))
+            viewModel.clearSelection()
+        }
+    }
+
     // Whether the page is being shown as a search result rather than plainly:
     // marks on the words, and a bar that says so. Outlives the search screen,
     // because landing on a hit is the point of running the search.
@@ -253,10 +299,15 @@ private fun DocumentReader(
         viewModel.clearSearch()
     }
 
-    // Back leaves the search screen, then the search, then the document - one
-    // layer at a time, and the same order the top bar's arrow goes in.
-    BackHandler(enabled = showSearch || searching) {
-        if (showSearch) showSearch = false else endSearch()
+    // Back leaves the selection, then the search screen, then the search, then
+    // the document - one layer at a time, and the same order the top bar's
+    // arrow goes in.
+    BackHandler(enabled = showSearch || searching || selection != null) {
+        when {
+            selection != null -> viewModel.clearSelection()
+            showSearch -> showSearch = false
+            else -> endSearch()
+        }
     }
 
     // The page the reader considers themselves on.
@@ -409,6 +460,9 @@ private fun DocumentReader(
     // from 0. Overlapping calls are safe - scrolling is mutually exclusive, so
     // dragging the slider leaves the last position asked for.
     fun goToPage(page: Int) {
+        // A selection belongs to the page it was made on, and the reader is
+        // leaving it.
+        viewModel.clearSelection()
         scope.launch { listState.scrollToItem((page - 1).coerceIn(0, state.pageCount - 1)) }
     }
 
@@ -424,8 +478,9 @@ private fun DocumentReader(
                 // arrives in viewport coordinates rather than content ones.
                 .pinchToZoom(
                     // The search panel covers the page; touches on it are the
-                    // panel's alone.
-                    enabled = !showSearch,
+                    // panel's alone. While text is being picked out the page
+                    // belongs to the selection for the same reason.
+                    enabled = !showSearch && selection == null,
                     onZoom = { scale, focus ->
                         gestureFocus = focus
                         gestureScale = (gestureScale * scale)
@@ -437,7 +492,19 @@ private fun DocumentReader(
                         zoomAbout(committed, gestureFocus)
                     },
                     onTap = { chromeVisible = !chromeVisible },
-                ),
+                )
+                // A tap puts the selection down, wherever on the reader it
+                // falls - the page it was made on, another page, or the space
+                // beside them. Here rather than on the page itself, which
+                // would only answer for taps that landed on that one page.
+                //
+                // The copy block and the selection's own ends are deeper in
+                // this tree and claim their presses first, so neither of them
+                // reads as a tap out here.
+                .pointerInput(selection != null) {
+                    if (selection == null) return@pointerInput
+                    detectTapGestures { viewModel.clearSelection() }
+                },
         ) {
             Box(
                 modifier = Modifier
@@ -472,6 +539,10 @@ private fun DocumentReader(
                 if (viewport.width > 0) {
                     LazyColumn(
                         state = listState,
+                        // A drag while text is being picked out belongs to the
+                        // selection, not to the list. Nothing else can yield
+                        // it: scrolling claims a drag the moment it travels.
+                        userScrollEnabled = selection == null,
                         modifier = Modifier
                             .width(contentWidthDp)
                             .fillMaxHeight(),
@@ -494,6 +565,8 @@ private fun DocumentReader(
                                 // Changes when the search does, which is what
                                 // sends a page to look up its marks again.
                                 highlightKey = highlightKey,
+                                selection = selection?.takeIf { it.page == index },
+                                onCopy = ::copySelection,
                                 viewModel = viewModel,
                             )
                         }
@@ -514,7 +587,10 @@ private fun DocumentReader(
             hidden = chromeHidden,
             backLabel = if (searching) "Clear search" else "Back to library",
             onBack = if (searching) ({ endSearch() }) else onBack,
-            onSearch = { showSearch = true },
+            onSearch = {
+                viewModel.clearSelection()
+                showSearch = true
+            },
             modifier = Modifier.align(Alignment.TopCenter),
         )
 
@@ -609,8 +685,13 @@ private fun PageView(
     renderWidth: Int,
     aspectRatio: Float,
     highlightKey: String,
+    selection: TextSelection?,
+    onCopy: () -> Unit,
     viewModel: ReaderViewModel,
 ) {
+    val scope = rememberCoroutineScope()
+    val haptics = LocalHapticFeedback.current
+    var pageSize by remember { mutableStateOf(IntSize.Zero) }
     // Seeded from whatever is already in memory, and deliberately not keyed on
     // renderWidth, so a page never blanks: zooming keeps showing the previous
     // rendering scaled until a sharper one arrives, and an item recomposed by
@@ -630,10 +711,67 @@ private fun PageView(
         value = if (highlightKey.isEmpty()) emptyList() else viewModel.highlights(pageNumber)
     }
 
+    // Where the selection sits on this page. Recomputed on every change to it,
+    // because a drag moves its end continuously.
+    val selectionRects by produceState(emptyList<PageRect>(), pageNumber, selection) {
+        value = if (selection == null) emptyList() else viewModel.selectionRects(pageNumber)
+    }
+    // Read inside gestures without restarting them: keying a `pointerInput` on
+    // rectangles that change with every drag event would cancel the very drag
+    // producing them.
+    val currentRects = rememberUpdatedState(selectionRects)
+
+    /** A point on this page, as fractions of it. */
+    fun fraction(point: Offset, size: IntSize): Pair<Float, Float>? {
+        if (size.width <= 0 || size.height <= 0) return null
+        return (point.x / size.width).coerceIn(0f, 1f) to
+            (point.y / size.height).coerceIn(0f, 1f)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
+            .onSizeChanged { pageSize = it }
+            // Press and hold to take a word. The list is still scrollable at
+            // this point, but a press that has not travelled is not a scroll,
+            // so nothing has to be taken from it.
+            .pointerInput(pageNumber) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { point ->
+                        val (x, y) = fraction(point, size) ?: return@detectDragGesturesAfterLongPress
+                        scope.launch {
+                            if (viewModel.selectWordAt(pageNumber, x, y)) {
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            }
+                        }
+                    },
+                    onDrag = { change, _ ->
+                        val (x, y) = fraction(change.position, size) ?: return@detectDragGesturesAfterLongPress
+                        scope.launch { viewModel.extendSelectionTo(x, y) }
+                    },
+                )
+            }
+            // Afterwards, either end can be taken and moved. Both ends are
+            // measured from the word the selection started on, so it does not
+            // matter which one is held - dragging out widens it and dragging
+            // back past the start turns it round.
+            .pointerInput(pageNumber, selection != null) {
+                if (selection == null) return@pointerInput
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val ends = selectionEnds(currentRects.value, size) ?: return@awaitEachGesture
+                    val reach = HandleReach.toPx()
+                    val grabbed = ends.any { (down.position - it).getDistance() <= reach }
+                    if (!grabbed) return@awaitEachGesture
+                    down.consume()
+                    drag(down.id) { change ->
+                        change.consume()
+                        val (x, y) = fraction(change.position, size) ?: return@drag
+                        scope.launch { viewModel.extendSelectionTo(x, y) }
+                    }
+                }
+            }
             // The design's `box-shadow: var(--shadow-sm)` is dropped: at this
             // gap it only smears into the rule between pages. The hairline edge
             // does the separating, so a scan that is white to its margin still
@@ -676,7 +814,98 @@ private fun PageView(
                 }
             }
         }
+
+        // The selection is washed deeper than a search mark, and carries a
+        // caliper at each end - the same square marks the page slider uses,
+        // rather than the teardrops Android draws.
+        if (selectionRects.isNotEmpty()) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                selectionRects.forEach { picked ->
+                    drawRect(
+                        color = IndustryAccent.copy(alpha = 0.30f),
+                        topLeft = Offset(picked.left * size.width, picked.top * size.height),
+                        size = Size(
+                            (picked.right - picked.left) * size.width,
+                            (picked.bottom - picked.top) * size.height,
+                        ),
+                    )
+                }
+                selectionEnds(selectionRects, IntSize(size.width.toInt(), size.height.toInt()))
+                    ?.forEach { end ->
+                        drawRect(
+                            color = IndustryAccent,
+                            topLeft = Offset(end.x - HandleWidth.toPx() / 2f, end.y),
+                            size = Size(HandleWidth.toPx(), HandleHeight.toPx()),
+                        )
+                    }
+            }
+        }
+
+        if (selection != null && selectionRects.isNotEmpty() && pageSize.height > 0) {
+            CopyBlock(
+                onCopy = onCopy,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .offset { copyBlockOffset(selectionRects, pageSize) },
+            )
+        }
     }
+}
+
+/**
+ * The design's chrome, shrunk to one action and set down on the page. Its width
+ * is fixed, as the go-to sheet's JUMP is, so the page can work out where to put
+ * it without measuring it first.
+ */
+@Composable
+private fun CopyBlock(onCopy: () -> Unit, modifier: Modifier = Modifier) {
+    Row(
+        modifier = modifier
+            .size(width = CopyBlockWidth, height = CopyBlockHeight)
+            .background(IndustryBackground.copy(alpha = 0.96f))
+            .border(1.dp, IndustryDivider)
+            .clickable(onClickLabel = "Copy selected text", onClick = onCopy),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(text = "COPY", style = MaterialTheme.typography.labelLarge)
+    }
+}
+
+/**
+ * Where the copy block goes: under the selection, or over it when the
+ * selection runs too near the foot of the page. Kept inside the page either
+ * way, so it cannot end up somewhere there is nothing to press.
+ */
+private fun Density.copyBlockOffset(rects: List<PageRect>, page: IntSize): IntOffset {
+    val width = CopyBlockWidth.toPx()
+    val height = CopyBlockHeight.toPx()
+    val gap = 8.dp.toPx()
+
+    val below = rects.maxOf { it.bottom } * page.height + gap
+    val above = rects.minOf { it.top } * page.height - height - gap
+    val y = if (below + height <= page.height) below else above
+
+    val centre = (rects.minOf { it.left } + rects.maxOf { it.right }) / 2f * page.width
+
+    return IntOffset(
+        x = (centre - width / 2f).coerceIn(0f, (page.width - width).coerceAtLeast(0f)).roundToInt(),
+        y = y.coerceIn(0f, (page.height - height).coerceAtLeast(0f)).roundToInt(),
+    )
+}
+
+/**
+ * The two ends of a selection, as points on the page: the foot of its first
+ * rectangle and the foot of its last.
+ */
+private fun selectionEnds(rects: List<PageRect>, size: IntSize): List<Offset>? {
+    if (rects.isEmpty() || size.width <= 0 || size.height <= 0) return null
+    val first = rects.first()
+    val last = rects.last()
+    return listOf(
+        Offset(first.left * size.width, first.bottom * size.height),
+        Offset(last.right * size.width, last.bottom * size.height),
+    )
 }
 
 /**

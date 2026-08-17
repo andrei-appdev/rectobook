@@ -85,6 +85,56 @@ interface PagedDocument : Closeable {
      * each line it touches needs its own.
      */
     fun textRects(pageNumber: Int, start: Int, end: Int): List<PageRect>
+
+    /**
+     * Which character of [pageText] sits at ([x], [y]), given as fractions of
+     * the page, or null where nothing does.
+     *
+     * The inverse of [textRects], and what selection is built on: a finger
+     * lands somewhere on a picture of a page, and the document is the only
+     * thing that knows what is written there.
+     *
+     * Implementations may answer with the start of the word under the point
+     * rather than the exact character - a DjVu's hidden text is boxed by the
+     * word - so callers that need a whole word should widen the result
+     * themselves.
+     */
+    fun charAt(pageNumber: Int, x: Float, y: Float): Int?
+}
+
+/**
+ * The whole word around [index], as a range into [text], or null if [index]
+ * does not land on one.
+ *
+ * Selection snaps to words rather than characters. DjVu can offer nothing finer
+ * - its hidden text is boxed a word at a time - and having one format select by
+ * the character while the other jumps by the word would make the same gesture
+ * behave differently depending on what was opened.
+ */
+fun wordAround(text: String, index: Int): IntRange? {
+    if (index < 0 || index >= text.length) return null
+    if (text[index].isWhitespace()) return null
+    var start = index
+    while (start > 0 && !text[start - 1].isWhitespace()) start--
+    var end = index
+    while (end + 1 < text.length && !text[end + 1].isWhitespace()) end++
+    return start..end
+}
+
+/**
+ * A run of text picked out on one page.
+ *
+ * [anchor] is the word the selection was started on. Both ends are measured
+ * from it, so dragging either way widens the selection from where it began
+ * rather than from wherever it last reached.
+ */
+data class TextSelection(
+    val page: Int,
+    val anchor: IntRange,
+    val start: Int,
+    val end: Int,
+) {
+    val isEmpty: Boolean get() = end <= start
 }
 
 /**

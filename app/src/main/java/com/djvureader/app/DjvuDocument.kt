@@ -68,6 +68,47 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
         return rects
     }
 
+    /**
+     * The word under the point, by its start in the joined text.
+     *
+     * Only whole words are boxed in a DjVu, so this is as fine as the file
+     * gets. A point that misses every box falls back to the nearest word on
+     * the same line, within a tolerance of one line's height - a finger aiming
+     * at a line usually lands in the leading above or below it, and refusing
+     * to answer would make selection feel broken rather than precise.
+     */
+    override fun charAt(pageNumber: Int, x: Float, y: Float): Int? {
+        checkOpen()
+        val words = words(pageNumber) ?: return null
+        val size = pageSize(pageNumber) ?: return null
+        if (size.width <= 0 || size.height <= 0) return null
+
+        // Into the page's own pixels, and back to DjVu's bottom-left origin.
+        val px = x * size.width
+        val py = (1f - y) * size.height
+
+        var at = 0
+        var nearest: Int? = null
+        var nearestDistance = Float.MAX_VALUE
+        for (word in words) {
+            val height = (word.top - word.bottom).toFloat().coerceAtLeast(1f)
+            val insideY = py >= word.bottom && py <= word.top
+            if (insideY && px >= word.left && px <= word.right) return at
+
+            // Distance to the box, counted as zero along an axis already
+            // inside it, so a point beside a word beats one a line away.
+            val dx = maxOf(word.left - px, 0f, px - word.right)
+            val dy = maxOf(word.bottom - py, 0f, py - word.top)
+            val distance = dx + dy * LINE_MISS_WEIGHT
+            if (distance < nearestDistance && dy <= height) {
+                nearestDistance = distance
+                nearest = at
+            }
+            at += word.text.length + 1
+        }
+        return nearest
+    }
+
     /** One word of hidden text, boxed in the page's own bottom-left pixels. */
     private class Word(
         val text: String,
@@ -150,6 +191,13 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
     companion object {
         /** Four box edges and a length, per word. */
         private const val WORD_HEADER_BYTES = 5 * Int.SIZE_BYTES
+
+        /**
+         * How much dearer a miss up or down is than one along the line. Lines
+         * sit close together, so without this a point in the gap between two
+         * lines would as readily take a word from the wrong one.
+         */
+        private const val LINE_MISS_WEIGHT = 4f
 
         /** DjVuLibre version string, for diagnostics. */
         val libraryVersion: String get() = DjvuNative.nativeVersion()
