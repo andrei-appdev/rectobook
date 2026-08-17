@@ -10,6 +10,21 @@ import java.io.IOException
 data class PageSize(val width: Int, val height: Int, val dpi: Int)
 
 /**
+ * A rectangle on a page, in fractions of the page's width and height with the
+ * origin at the top left.
+ *
+ * Fractions rather than pixels because a page is rendered at whatever width the
+ * viewport and zoom ask for, and a highlight has to land on the text at every
+ * one of them.
+ */
+data class PageRect(
+    val left: Float,
+    val top: Float,
+    val right: Float,
+    val bottom: Float,
+)
+
+/**
  * A document the reader can show: a fixed number of pages, each with a size, a
  * picture and possibly some text.
  *
@@ -60,6 +75,16 @@ interface PagedDocument : Closeable {
      * so an empty result is ordinary rather than exceptional.
      */
     fun pageText(pageNumber: Int): String?
+
+    /**
+     * Rectangles covering characters [start] until [end] of the string
+     * [pageText] returns for this page - what a search match occupies on the
+     * page, so it can be marked there.
+     *
+     * More than one rectangle because a match can run across a line break, and
+     * each line it touches needs its own.
+     */
+    fun textRects(pageNumber: Int, start: Int, end: Int): List<PageRect>
 }
 
 /**

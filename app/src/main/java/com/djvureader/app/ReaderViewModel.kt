@@ -300,6 +300,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
 
+        highlightCache.clear()
         searchJob = viewModelScope.launch {
             delay(SEARCH_DEBOUNCE_MS)
             val hits = mutableListOf<SearchHit>()
@@ -339,6 +340,36 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         searchJob?.cancel()
         searchJob = null
         _search.value = SearchResults()
+        highlightCache.clear()
+    }
+
+    /** Marks already worked out, per page, for the search now showing. */
+    private val highlightCache = ConcurrentHashMap<Int, List<PageRect>>()
+
+    /**
+     * Where the current search's matches sit on [pageNumber], as fractions of
+     * the page, or empty if nothing matches there.
+     *
+     * Worked out only for pages actually on screen: a match's position is not
+     * in the text the scan already read, so answering for every page would mean
+     * decoding the whole document again to mark the handful being looked at.
+     */
+    suspend fun highlights(pageNumber: Int): List<PageRect> {
+        val results = _search.value
+        if (results.query.length < MIN_QUERY_LENGTH) return emptyList()
+        val onPage = results.hits.filter { it.page == pageNumber }
+        if (onPage.isEmpty()) return emptyList()
+        highlightCache[pageNumber]?.let { return it }
+
+        val rects = withContext(Dispatchers.IO) {
+            documentLock.withLock {
+                val open = document ?: return@withLock emptyList()
+                onPage.flatMap { open.textRects(pageNumber, it.start, it.end) }
+            }
+        }
+        // Not while the scan is still running: this page may yet gain matches.
+        if (!results.running) highlightCache[pageNumber] = rects
+        return rects
     }
 
     /**

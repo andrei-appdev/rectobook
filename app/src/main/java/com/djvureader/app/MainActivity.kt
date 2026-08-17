@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,6 +51,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -59,6 +61,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asImageBitmap
@@ -76,6 +79,7 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.djvureader.app.ui.theme.DjvuTheme
+import com.djvureader.app.ui.theme.IndustryAccent
 import com.djvureader.app.ui.theme.IndustryNeutral200
 import com.djvureader.app.ui.theme.TabularNums
 import com.djvureader.app.ui.theme.onSurfaceAlpha
@@ -295,6 +299,14 @@ private fun DocumentReader(
     val contentWidthDp = with(LocalDensity.current) { (viewport.width * zoom).toInt().toDp() }
     val renderWidth = (viewport.width * renderZoom).toInt()
 
+    // Identity of the marks a page should be showing. The hit count is in it
+    // because a scan still running keeps finding more on pages already drawn.
+    val highlightKey = if (searchResults.query.length >= MIN_QUERY_LENGTH) {
+        "${searchResults.query}/${searchResults.hits.size}"
+    } else {
+        ""
+    }
+
     /**
      * Zooms by [scale] about [focus], given in viewport coordinates.
      *
@@ -442,6 +454,9 @@ private fun DocumentReader(
                                 pageNumber = index,
                                 renderWidth = renderWidth,
                                 aspectRatio = aspectRatio,
+                                // Changes when the search does, which is what
+                                // sends a page to look up its marks again.
+                                highlightKey = highlightKey,
                                 viewModel = viewModel,
                             )
                         }
@@ -549,6 +564,7 @@ private fun PageView(
     pageNumber: Int,
     renderWidth: Int,
     aspectRatio: Float,
+    highlightKey: String,
     viewModel: ReaderViewModel,
 ) {
     // Seeded from whatever is already in memory, and deliberately not keyed on
@@ -562,6 +578,12 @@ private fun PageView(
         viewModel.cachedPage(pageNumber)?.let { if (bitmap == null) bitmap = it }
         val rendered = viewModel.renderPage(pageNumber, renderWidth)
         if (rendered != null) bitmap = rendered
+    }
+
+    // Where this page's search matches are, asked for only while a search is
+    // showing and only for pages actually composed.
+    val highlights by produceState(emptyList<PageRect>(), pageNumber, highlightKey) {
+        value = if (highlightKey.isEmpty()) emptyList() else viewModel.highlights(pageNumber)
     }
 
     Box(
@@ -591,6 +613,24 @@ private fun PageView(
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
             )
+        }
+
+        // Drawn over the page rather than into it, so a mark costs nothing to
+        // put up or take down and never touches the cached rendering. The wash
+        // is the design's own `<mark>`, which the hit list already uses.
+        if (highlights.isNotEmpty()) {
+            Canvas(modifier = Modifier.matchParentSize()) {
+                highlights.forEach { mark ->
+                    drawRect(
+                        color = IndustryAccent.copy(alpha = 0.32f),
+                        topLeft = Offset(mark.left * size.width, mark.top * size.height),
+                        size = Size(
+                            (mark.right - mark.left) * size.width,
+                            (mark.bottom - mark.top) * size.height,
+                        ),
+                    )
+                }
+            }
         }
     }
 }

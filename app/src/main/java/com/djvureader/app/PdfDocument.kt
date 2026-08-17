@@ -116,6 +116,37 @@ class PdfDocument private constructor(
         }.getOrNull()
     }
 
+    /**
+     * PDFium reports the rectangles a character range occupies itself, one per
+     * line the range crosses, which is exactly what a highlight needs.
+     */
+    override fun textRects(pageNumber: Int, start: Int, end: Int): List<PageRect> = locked {
+        if (closed || end <= start) return@locked emptyList()
+        runCatching {
+            document.openPage(pageNumber).use { page ->
+                val width = page.getPageWidthPoint().toFloat()
+                val height = page.getPageHeightPoint().toFloat()
+                if (width <= 0f || height <= 0f) return@use emptyList()
+
+                document.openTextPage(page).use { text ->
+                    val count = end - start
+                    (0 until text.textPageCountRects(start, count)).mapNotNull { index ->
+                        text.textPageGetRect(index)?.let { rect ->
+                            PageRect(
+                                left = rect.left / width,
+                                // PDF pages are measured from the bottom, and
+                                // PDFium keeps that convention here.
+                                top = 1f - rect.top / height,
+                                right = rect.right / width,
+                                bottom = 1f - rect.bottom / height,
+                            )
+                        }
+                    }
+                }
+            }
+        }.getOrDefault(emptyList())
+    }
+
     override fun close() = locked {
         if (!closed) {
             closed = true

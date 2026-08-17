@@ -4,6 +4,12 @@ package com.djvureader.app
 data class SearchHit(
     /** 0-based page, as everything below the UI counts them. */
     val page: Int,
+    /**
+     * Where the match sits in the string the page's text came back as, so the
+     * document can be asked what it covers and the match marked there.
+     */
+    val start: Int,
+    val end: Int,
     val before: String,
     /** The matched text itself, in the case the page spells it. */
     val term: String,
@@ -44,18 +50,47 @@ const val MAX_HITS = 400
 private const val LEAD = 36
 private const val TRAIL = 64
 
-private val Whitespace = Regex("\\s+")
-
 /**
- * Every occurrence of [query] in one page's text, as hits ready to display.
+ * A page's text with every run of whitespace collapsed to one space, and, for
+ * each character kept, where it came from in the original.
  *
- * The text is flattened to single-spaced first: hidden text arrives broken by
- * the lines of the scan, and a snippet that kept those breaks would be shaped
- * by the page's column width rather than by the sentence.
+ * Searching wants the flattened form - hidden text arrives broken by the lines
+ * of the scan, and a snippet that kept those breaks would be shaped by the
+ * page's column width rather than by the sentence. Marking a match on the page
+ * wants the original, because that is the string the document can be asked
+ * about. Keeping the map means neither has to give way.
  */
+private class Flattened(val text: String, val source: IntArray)
+
+private fun flatten(pageText: String): Flattened {
+    val text = StringBuilder(pageText.length)
+    val source = IntArray(pageText.length)
+    var afterSpace = true
+    for (index in pageText.indices) {
+        val character = pageText[index]
+        if (character.isWhitespace()) {
+            // Leading and repeated whitespace is dropped rather than kept as a
+            // space nothing would match against.
+            if (!afterSpace) {
+                source[text.length] = index
+                text.append(' ')
+                afterSpace = true
+            }
+        } else {
+            source[text.length] = index
+            text.append(character)
+            afterSpace = false
+        }
+    }
+    while (text.isNotEmpty() && text.last() == ' ') text.setLength(text.length - 1)
+    return Flattened(text.toString(), source)
+}
+
+/** Every occurrence of [query] in one page's text, as hits ready to display. */
 fun findHits(pageText: String, query: String, page: Int, limit: Int): List<SearchHit> {
     if (query.isEmpty() || limit <= 0) return emptyList()
-    val text = pageText.replace(Whitespace, " ").trim()
+    val flattened = flatten(pageText)
+    val text = flattened.text
     if (text.isEmpty()) return emptyList()
 
     val hits = mutableListOf<SearchHit>()
@@ -69,6 +104,8 @@ fun findHits(pageText: String, query: String, page: Int, limit: Int): List<Searc
         val trailTo = (end + TRAIL).coerceAtMost(text.length)
         hits += SearchHit(
             page = page,
+            start = flattened.source[at],
+            end = flattened.source[end - 1] + 1,
             // The ellipses mark where the line was cut, so a snippet starting
             // mid-sentence does not read as the start of one.
             before = (if (leadFrom > 0) "…" else "") + text.substring(leadFrom, at),

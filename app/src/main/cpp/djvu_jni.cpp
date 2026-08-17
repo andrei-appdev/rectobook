@@ -53,32 +53,67 @@ bool drainMessages(ddjvu_context_t *context, bool wait) {
     return ok;
 }
 
-// Appends every string in a hidden-text s-expression to `out`, separated by
-// spaces.
+void appendInt(std::string &out, int value) {
+    out.push_back(static_cast<char>((value >> 24) & 0xFF));
+    out.push_back(static_cast<char>((value >> 16) & 0xFF));
+    out.push_back(static_cast<char>((value >> 8) & 0xFF));
+    out.push_back(static_cast<char>(value & 0xFF));
+}
+
+// Appends every piece of text in a hidden-text s-expression, each with the box
+// it occupies on the page.
 //
-// djvused's text syntax nests as (word bbox "text") inside lines inside
-// paragraphs, with the bounding boxes as numbers and the text as strings, so
-// collecting the strings in order and ignoring everything else yields the
-// page's text.
+// A node is (type xmin ymin xmax ymax rest...), where rest is either the text
+// itself for a leaf or the child nodes for anything above one. The coordinates
+// are in the page's own pixels with the origin at the bottom left, which is
+// DjVu's convention and not Android's; the Kotlin side flips them.
 //
-// The separator is ours to choose, and has to be: asking ddjvu for the text at
-// "page" granularity returns one pre-joined string in which some words run
-// together and others do not, so "DjVu is an image" can come back as
-// "DjVuisanimage". Joining the words here instead puts exactly one space
-// between each.
-void collectText(miniexp_t exp, std::string &out) {
-    if (miniexp_stringp(exp)) {
-        const char *text = miniexp_to_str(exp);
-        if (text && *text) {
-            if (!out.empty()) {
-                out.push_back(' ');
-            }
-            out.append(text);
-        }
+// The encoding is xmin, ymin, xmax, ymax, byte count, then that many UTF-8
+// bytes, per word, big-endian. It is read straight back in Kotlin, so it never
+// has to survive anything but this one hop.
+void collectWords(miniexp_t exp, std::string &out) {
+    if (!miniexp_consp(exp)) {
         return;
     }
+
+    if (miniexp_symbolp(miniexp_car(exp))) {
+        miniexp_t rest = miniexp_cdr(exp);
+        int box[4];
+        bool boxed = true;
+        for (int &edge : box) {
+            miniexp_t value = miniexp_car(rest);
+            if (!miniexp_numberp(value)) {
+                boxed = false;
+                break;
+            }
+            edge = miniexp_to_int(value);
+            rest = miniexp_cdr(rest);
+        }
+
+        if (boxed) {
+            if (miniexp_stringp(miniexp_car(rest))) {
+                const char *text = miniexp_to_str(miniexp_car(rest));
+                if (text && *text) {
+                    for (int edge : box) {
+                        appendInt(out, edge);
+                    }
+                    const auto length = static_cast<int>(std::strlen(text));
+                    appendInt(out, length);
+                    out.append(text, length);
+                }
+                return;
+            }
+            while (miniexp_consp(rest)) {
+                collectWords(miniexp_car(rest), out);
+                rest = miniexp_cdr(rest);
+            }
+            return;
+        }
+    }
+
+    // Not shaped like a text node after all, so walk it as a plain list.
     while (miniexp_consp(exp)) {
-        collectText(miniexp_car(exp), out);
+        collectWords(miniexp_car(exp), out);
         exp = miniexp_cdr(exp);
     }
 }
@@ -190,8 +225,8 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageInfo(JNIEnv *env, jobject, jlong
 // differs from real UTF-8 above the BMP, and this text comes from an OCR engine
 // we do not control. Kotlin decodes it properly.
 JNIEXPORT jbyteArray JNICALL
-Java_com_djvureader_app_DjvuNative_nativeGetPageText(JNIEnv *env, jobject, jlong handle,
-                                                    jint pageNumber) {
+Java_com_djvureader_app_DjvuNative_nativeGetPageWords(JNIEnv *env, jobject, jlong handle,
+                                                     jint pageNumber) {
     Document *doc = asDocument(handle);
     if (!doc || !doc->document) {
         return nullptr;
@@ -208,7 +243,7 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageText(JNIEnv *env, jobject, jlong
     // page) or one of the `failed`/`stopped` symbols. Only lists hold text, and
     // only lists are registered with the document's garbage collector.
     if (miniexp_consp(text)) {
-        collectText(text, collected);
+        collectWords(text, collected);
         ddjvu_miniexp_release(doc->document, text);
     }
 
