@@ -1,0 +1,94 @@
+<resources>
+
+    <!--
+      Spanish. Quotation marks are the angular ones the RAE asks for, not the
+      English curly pair; page is abbreviated pág., and the size units are the
+      same letters as in English.
+    -->
+
+    <!-- Library -->
+    <string name="library_about">Acerca de la aplicación</string>
+    <string name="library_open_file">Abrir archivo</string>
+    <string name="library_recent">Recientes</string>
+    <string name="library_last_opened">Última apertura</string>
+    <string name="library_page_marker">P.%1$d</string>
+    <string name="library_not_measured">Sin datos</string>
+    <!--
+      Spanish has a "many" form as well as one and other: from a million up it
+      takes "de" before the noun. No document has that many pages, but the
+      category exists in the language and a resource that omits it is
+      incomplete rather than merely unused.
+    -->
+    <plurals name="library_page_count">
+        <item quantity="one">%1$d pág.</item>
+        <item quantity="many">%1$d de págs.</item>
+        <item quantity="other">%1$d págs.</item>
+    </plurals>
+
+    <!-- File sizes. The units happen to be the English ones; the string is
+         still here so the language owns them rather than inheriting them. -->
+    <string name="size_gb">%1$s GB</string>
+    <string name="size_mb">%1$s MB</string>
+    <string name="size_kb">%1$s KB</string>
+
+    <!-- Reader -->
+    <string name="reader_back_to_library">Volver a la biblioteca</string>
+    <string name="reader_clear_search">Borrar búsqueda</string>
+    <string name="reader_title_search">Búsqueda «%1$s»</string>
+    <string name="reader_contents">Índice</string>
+    <string name="reader_page_description">Página %1$d</string>
+    <string name="reader_page_slider">Control de páginas</string>
+    <string name="reader_zoom_in">Acercar</string>
+    <string name="reader_zoom_out">Alejar</string>
+    <string name="reader_copy">Copiar</string>
+    <string name="reader_copy_description">Copiar el texto seleccionado</string>
+
+    <!-- Search -->
+    <string name="search_in_document">Buscar en el documento</string>
+    <string name="search_close">Cerrar búsqueda</string>
+    <string name="search_type_to_search">Escriba para buscar</string>
+    <string name="search_keep_typing">Siga escribiendo</string>
+    <string name="search_scanning">Buscando %1$d / %2$d</string>
+    <string name="search_no_text_layer">El documento no tiene capa de texto</string>
+    <string name="search_no_matches">Sin coincidencias para «%1$s»</string>
+    <string name="search_stopped_at">Se muestran las primeras %1$d coincidencias. Acote la búsqueda para ver el resto.</string>
+    <string name="search_hit_page">p.%1$d</string>
+    <plurals name="search_matches">
+        <item quantity="one">%1$d coincidencia para «%2$s»</item>
+        <item quantity="many">%1$d de coincidencias para «%2$s»</item>
+        <item quantity="other">%1$d coincidencias para «%2$s»</item>
+    </plurals>
+    <plurals name="search_matches_so_far">
+        <item quantity="one">Por ahora, %1$d coincidencia para «%2$s»</item>
+        <item quantity="many">Por ahora, %1$d de coincidencias para «%2$s»</item>
+        <item quantity="other">Por ahora, %1$d coincidencias para «%2$s»</item>
+    </plurals>
+    <string name="search_matches_capped">Más de %1$d coincidencias para «%2$s»</string>
+    <string name="search_matches_capped_so_far">Por ahora, más de %1$d coincidencias para «%2$s»</string>
+
+    <!-- Contents -->
+    <string name="outline_title">Índice</string>
+    <string name="outline_close">Cerrar índice</string>
+
+    <!-- Go to page -->
+    <string name="goto_page_number">Número de página</string>
+    <string name="goto_jump">Ir</string>
+
+    <!-- Following a link out of the document -->
+    <string name="link_leave_document">Salir del documento</string>
+    <string name="link_cancel">Cancelar</string>
+    <string name="link_open">Abrir</string>
+
+    <!-- About -->
+    <string name="about_title">Acerca de</string>
+    <string name="about_version">Versión %1$s</string>
+
+    <!-- Opening a document that will not open -->
+    <string name="error_open_document">No se ha podido abrir el documento:\n%1$s</string>
+    <string name="error_choose_another_file">Elegir otro archivo</string>
+    <string name="error_not_a_document">Esto no es un documento DjVu ni PDF.</string>
+    <string name="error_unreadable_djvu">No se ha podido leer el archivo DjVu.</string>
+    <string name="error_password_protected">El PDF está protegido con contraseña.</string>
+    <string name="error_cannot_read">No se ha podido leer el archivo.</string>
+    <string name="error_empty_file">El archivo está vacío.</string>
+</resources>
