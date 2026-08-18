@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The languages the app is translated into.
+
+  This is what puts it in the system's per-app language picker, so a reader
+  whose phone is in one language can still read the app in another. Android
+  13 and up act on it; below that it is ignored, and the app simply follows
+  the system language as it always did.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="en" />
+    <locale android:name="ru" />
+</locale-config>

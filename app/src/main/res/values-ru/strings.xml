@@ -1,0 +1,97 @@
+<resources>
+
+    <!--
+      Russian. Quotation marks are the guillemets Russian typography uses, not
+      the English curly pair; the abbreviations are the ones a Russian reader
+      expects (с. for страница, стр. for pages, МБ for megabytes).
+    -->
+
+    <!-- Library -->
+    <string name="library_about">О приложении</string>
+    <string name="library_open_file">Открыть файл</string>
+    <string name="library_recent">Недавние</string>
+    <string name="library_last_opened">По дате открытия</string>
+    <!-- Short on purpose: it sits at the end of the progress row. -->
+    <string name="library_finished">Готово</string>
+    <string name="library_page_marker">С.%1$d</string>
+    <string name="library_not_measured">Нет данных</string>
+    <!--
+      The abbreviation does not decline, so every form is the same word. The
+      forms are still spelled out: Russian needs one/few/many, and a resource
+      with only "other" would be wrong the moment the abbreviation is dropped.
+    -->
+    <plurals name="library_page_count">
+        <item quantity="one">%1$d стр.</item>
+        <item quantity="few">%1$d стр.</item>
+        <item quantity="many">%1$d стр.</item>
+        <item quantity="other">%1$d стр.</item>
+    </plurals>
+
+    <!-- File sizes -->
+    <string name="size_gb">%1$s ГБ</string>
+    <string name="size_mb">%1$s МБ</string>
+    <string name="size_kb">%1$s КБ</string>
+
+    <!-- Reader -->
+    <string name="reader_back_to_library">Назад к библиотеке</string>
+    <string name="reader_clear_search">Очистить поиск</string>
+    <string name="reader_title_search">Поиск «%1$s»</string>
+    <string name="reader_contents">Оглавление</string>
+    <string name="reader_page_description">Страница %1$d</string>
+    <string name="reader_page_slider">Ползунок страниц</string>
+    <string name="reader_zoom_in">Увеличить</string>
+    <string name="reader_zoom_out">Уменьшить</string>
+    <string name="reader_copy">Копировать</string>
+    <string name="reader_copy_description">Копировать выделенный текст</string>
+
+    <!-- Search -->
+    <string name="search_in_document">Поиск в документе</string>
+    <string name="search_close">Закрыть поиск</string>
+    <string name="search_type_to_search">Введите запрос</string>
+    <string name="search_keep_typing">Продолжайте вводить</string>
+    <string name="search_scanning">Поиск %1$d / %2$d</string>
+    <string name="search_no_text_layer">В документе нет текстового слоя</string>
+    <string name="search_no_matches">Нет совпадений для «%1$s»</string>
+    <string name="search_stopped_at">Показаны первые %1$d совпадений. Уточните запрос, чтобы увидеть остальные.</string>
+    <string name="search_hit_page">с.%1$d</string>
+    <plurals name="search_matches">
+        <item quantity="one">%1$d совпадение для «%2$s»</item>
+        <item quantity="few">%1$d совпадения для «%2$s»</item>
+        <item quantity="many">%1$d совпадений для «%2$s»</item>
+        <item quantity="other">%1$d совпадения для «%2$s»</item>
+    </plurals>
+    <plurals name="search_matches_so_far">
+        <item quantity="one">Пока %1$d совпадение для «%2$s»</item>
+        <item quantity="few">Пока %1$d совпадения для «%2$s»</item>
+        <item quantity="many">Пока %1$d совпадений для «%2$s»</item>
+        <item quantity="other">Пока %1$d совпадения для «%2$s»</item>
+    </plurals>
+    <string name="search_matches_capped">Более %1$d совпадений для «%2$s»</string>
+    <string name="search_matches_capped_so_far">Пока более %1$d совпадений для «%2$s»</string>
+
+    <!-- Contents -->
+    <string name="outline_title">Оглавление</string>
+    <string name="outline_close">Закрыть оглавление</string>
+
+    <!-- Go to page -->
+    <string name="goto_page_number">Номер страницы</string>
+    <string name="goto_jump">Перейти</string>
+
+    <!-- Following a link out of the document -->
+    <string name="link_leave_document">Покинуть документ</string>
+    <string name="link_cancel">Отмена</string>
+    <string name="link_open">Открыть</string>
+
+    <!-- About -->
+    <string name="about_title">О приложении</string>
+    <string name="about_version">Версия %1$s</string>
+
+    <!-- Opening a document that will not open -->
+    <string name="error_open_document">Не удалось открыть документ:\n%1$s</string>
+    <string name="error_choose_another_file">Выбрать другой файл</string>
+    <string name="error_not_a_document">Это не документ DjVu или PDF.</string>
+    <string name="error_unreadable_djvu">Не удалось прочитать файл DjVu.</string>
+    <string name="error_password_protected">PDF защищён паролем.</string>
+    <string name="error_cannot_read">Не удалось прочитать файл.</string>
+    <string name="error_empty_file">Файл пуст.</string>
+</resources>
