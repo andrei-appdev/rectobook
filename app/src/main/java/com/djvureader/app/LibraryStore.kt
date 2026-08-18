@@ -22,6 +22,8 @@ data class RecentDocument(
     /** 0 when recorded by an older build that did not store it. */
     val pageCount: Int = 0,
     val sizeBytes: Long = 0,
+    /** Null for the same reason, and for an entry written before this was kept. */
+    val format: DocumentFormat? = null,
 ) {
     /** How far through the document we are, 0f..1f. */
     val progress: Float
@@ -54,6 +56,7 @@ class LibraryStore(private val context: Context) {
         displayName: String,
         pageCount: Int,
         sizeBytes: Long,
+        format: DocumentFormat,
     ) {
         context.libraryDataStore.edit { preferences ->
             val existing = decode(preferences[RECENTS_KEY])
@@ -65,6 +68,7 @@ class LibraryStore(private val context: Context) {
                 lastOpenedAt = System.currentTimeMillis(),
                 pageCount = pageCount,
                 sizeBytes = sizeBytes,
+                format = format,
             )
             val updated = (listOf(entry) + existing.filterNot { it.key == key }).take(MAX_RECENTS)
             preferences[RECENTS_KEY] = encode(updated)
@@ -97,6 +101,11 @@ class LibraryStore(private val context: Context) {
                     lastOpenedAt = item.optLong("opened"),
                     pageCount = item.optInt("pages"),
                     sizeBytes = item.optLong("bytes"),
+                    // Guarded on its own: an unreadable name here would other-
+                    // wise take the whole list down with it.
+                    format = runCatching {
+                        DocumentFormat.valueOf(item.getString("format"))
+                    }.getOrNull(),
                 )
             }
             // Earlier builds shipped a sample document and recorded it under
@@ -115,7 +124,8 @@ class LibraryStore(private val context: Context) {
                     .put("page", entry.lastPage)
                     .put("opened", entry.lastOpenedAt)
                     .put("pages", entry.pageCount)
-                    .put("bytes", entry.sizeBytes),
+                    .put("bytes", entry.sizeBytes)
+                    .put("format", entry.format?.name),
             )
         }
         return array.toString()

@@ -311,6 +311,7 @@ private fun DrawScope.stripes(
 }
 
 private fun documentMeta(document: RecentDocument): String = buildList {
+    document.format?.let { add(it.label) }
     if (document.pageCount > 0) add("${document.pageCount} pp")
     if (document.sizeBytes > 0) add(formatSize(document.sizeBytes))
 }.joinToString(" · ").ifEmpty { "Not yet measured" }

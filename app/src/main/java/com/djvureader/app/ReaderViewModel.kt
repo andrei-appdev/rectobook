@@ -253,6 +253,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                         displayName = opened.displayName,
                         pageCount = opened.pageCount,
                         sizeBytes = opened.sizeBytes,
+                        format = opened.format,
                     )
                     // After the state, not with it: a long outline should
                     // not hold the first page off the screen.
