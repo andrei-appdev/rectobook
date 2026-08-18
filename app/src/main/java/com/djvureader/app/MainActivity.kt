@@ -329,22 +329,50 @@ private fun DocumentReader(
         derivedStateOf { listState.mostVisiblePage() + 1 }
     }
 
+    // Where the reader is, as a page and how far down it - kept across a
+    // rotation. The list saves its own position, but as an offset in pixels,
+    // and a rotation re-measures every page to the new width: the same pixel
+    // is a different place down a page of a different height. A fraction is
+    // the same place either way. The key goes with it so that opening another
+    // document cannot land on the position held for the last one.
+    var anchorKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var anchorPage by rememberSaveable { mutableStateOf(-1) }
+    var anchorFraction by rememberSaveable { mutableFloatStateOf(0f) }
+
     // Resume where this document was left, then keep saving as it is read.
     // Both live in one effect so the restore completes before the first save,
     // otherwise the initial position would overwrite the stored page with 0.
     LaunchedEffect(state.documentKey) {
+        // Not before the list has been laid out. A scroll against a list with
+        // no measured pages is clamped to whatever its content height is at
+        // the time, and lands short.
+        snapshotFlow { listState.layoutInfo.viewportSize.height }.first { it > 0 }
+
         // Claimed rather than simply done, because this effect restarts with
         // every new composition - including the one a rotation brings - while
-        // the page to resume at does not change. The list carries its own
-        // position across a rotation; scrolling it back to the resume point
-        // would throw away everything read since.
+        // the page to resume at does not change. Scrolling back to the resume
+        // point on a rotation would throw away everything read since.
         if (state.initialPage > 0 && viewModel.claimPositionRestore(state.documentKey)) {
-            // Not before the list has been laid out. A scroll against a list
-            // with no measured pages is clamped to whatever its content height
-            // is at the time, and lands short.
-            snapshotFlow { listState.layoutInfo.viewportSize.height }.first { it > 0 }
             listState.scrollToItem(state.initialPage)
+        } else if (anchorKey == state.documentKey && anchorPage >= 0) {
+            listState.scrollToAnchor(anchorPage, anchorFraction)
         }
+
+        // Only now: until the position above is restored, what the list reports
+        // is the place the rotation left it, which would overwrite the anchor
+        // with the very value being corrected.
+        launch {
+            snapshotFlow { listState.readingAnchor() }
+                .distinctUntilChanged()
+                .collect { anchor ->
+                    if (anchor != null) {
+                        anchorKey = state.documentKey
+                        anchorPage = anchor.first
+                        anchorFraction = anchor.second
+                    }
+                }
+        }
+
         // Saved against the same page the counter shows, or the library card
         // and the reader would disagree about where the document was left.
         snapshotFlow { listState.mostVisiblePage() }
@@ -763,6 +791,33 @@ private fun LazyListState.mostVisiblePage(): Int {
         val bottom = minOf(page.offset + page.size, info.viewportEndOffset)
         bottom - top
     }?.index ?: firstVisibleItemIndex
+}
+
+/**
+ * Where the list sits, as a page and the fraction of it already scrolled past.
+ *
+ * Measured from the top of the content rather than the top of the viewport,
+ * because that is the anchor [scrollToItem] takes - the two differ by the
+ * chrome's height, which the pages are padded by.
+ */
+private fun LazyListState.readingAnchor(): Pair<Int, Float>? {
+    val visible = layoutInfo.visibleItemsInfo
+    val item = visible.firstOrNull { it.offset <= 0 && it.offset + it.size > 0 }
+        ?: visible.firstOrNull()
+        ?: return null
+    if (item.size <= 0) return null
+    return item.index to ((-item.offset).toFloat() / item.size).coerceIn(0f, 1f)
+}
+
+/** Puts the list back at [fraction] of the way down [page]. */
+private suspend fun LazyListState.scrollToAnchor(page: Int, fraction: Float) {
+    // Twice: the first scroll brings the page into the layout so that it is
+    // measured at the width it now has, the second places it once that height
+    // is known. A single scroll would have to guess the height in advance,
+    // which is the whole difficulty - it is what changed.
+    scrollToItem(page)
+    val size = layoutInfo.visibleItemsInfo.firstOrNull { it.index == page }?.size ?: return
+    scrollToItem(page, (fraction * size).roundToInt())
 }
 
 /**
