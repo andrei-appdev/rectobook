@@ -314,13 +314,16 @@ private fun DocumentReader(
 
     // Back leaves the selection, then the search screen, then the search, then
     // the document - one layer at a time, and the same order the top bar's
-    // arrow goes in.
-    BackHandler(enabled = showSearch || showOutline || searching || selection != null) {
+    // arrow goes in. The last step is the point of always being enabled: left
+    // to the system, back from a plainly open document closed the app, when
+    // the arrow beside it goes to the library.
+    BackHandler {
         when {
             selection != null -> viewModel.clearSelection()
             showOutline -> showOutline = false
             showSearch -> showSearch = false
-            else -> endSearch()
+            searching -> endSearch()
+            else -> onBack()
         }
     }
 
