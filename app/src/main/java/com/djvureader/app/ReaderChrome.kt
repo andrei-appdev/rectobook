@@ -5,6 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Arrangement
@@ -152,7 +155,16 @@ internal fun StrokeIcon(
     }
 }
 
-/** The design's `.btn-icon`: a 36dp square with no border of its own. */
+/**
+ * The design's `.btn-icon`: a 36dp square with no border of its own.
+ *
+ * Its states are drawn here rather than left to Material's ripple. The mark
+ * sits alone in an unclipped 36dp box, and the ripple fills that box: a
+ * focused one - which is what the first control on a screen becomes as soon as
+ * a keyboard is attached - reads as a mis-coloured tile behind the icon rather
+ * than as a control. A wash while pressed and a rule while focused say the same
+ * thing in the design's own terms.
+ */
 @Composable
 internal fun IconAction(
     icon: Icon24,
@@ -160,10 +172,21 @@ internal fun IconAction(
     onClick: () -> Unit,
     size: Dp = 19.dp,
 ) {
+    val interactions = remember { MutableInteractionSource() }
+    val pressed by interactions.collectIsPressedAsState()
+    val focused by interactions.collectIsFocusedAsState()
+
     Box(
         modifier = Modifier
             .size(36.dp)
-            .clickable(onClickLabel = label, onClick = onClick),
+            .background(if (pressed) onSurfaceAlpha(0.10f) else Color.Transparent)
+            .then(if (focused) Modifier.border(1.dp, IndustryAccent) else Modifier)
+            .clickable(
+                interactionSource = interactions,
+                indication = null,
+                onClickLabel = label,
+                onClick = onClick,
+            ),
         contentAlignment = Alignment.Center,
     ) {
         StrokeIcon(icon, size = size)
