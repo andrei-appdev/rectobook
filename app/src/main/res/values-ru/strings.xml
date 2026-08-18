@@ -11,8 +11,6 @@
     <string name="library_open_file">Открыть файл</string>
     <string name="library_recent">Недавние</string>
     <string name="library_last_opened">По дате открытия</string>
-    <!-- Short on purpose: it sits at the end of the progress row. -->
-    <string name="library_finished">Готово</string>
     <string name="library_page_marker">С.%1$d</string>
     <string name="library_not_measured">Нет данных</string>
     <!--

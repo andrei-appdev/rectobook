@@ -190,11 +190,7 @@ private fun RecentCard(
                     )
                 }
                 Text(
-                    text = if (document.isFinished) {
-                        upperStringResource(R.string.library_finished)
-                    } else {
-                        stringResource(R.string.library_page_marker, document.lastPage + 1)
-                    },
+                    text = stringResource(R.string.library_page_marker, document.lastPage + 1),
                     style = MaterialTheme.typography.labelSmall
                         .copy(fontFeatureSettings = TabularNums),
                     color = IndustryAccent700,

@@ -14,7 +14,6 @@
     <string name="library_open_file">Open file</string>
     <string name="library_recent">Recent</string>
     <string name="library_last_opened">Last opened</string>
-    <string name="library_finished">Done</string>
     <string name="library_page_marker">P.%1$d</string>
     <string name="library_not_measured">Not yet measured</string>
     <plurals name="library_page_count">

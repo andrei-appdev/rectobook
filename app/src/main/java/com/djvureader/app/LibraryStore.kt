@@ -28,9 +28,6 @@ data class RecentDocument(
     /** How far through the document we are, 0f..1f. */
     val progress: Float
         get() = if (pageCount > 1) (lastPage.toFloat() / (pageCount - 1)).coerceIn(0f, 1f) else 0f
-
-    val isFinished: Boolean
-        get() = pageCount > 0 && lastPage >= pageCount - 1
 }
 
 private val Context.libraryDataStore: DataStore<Preferences> by
