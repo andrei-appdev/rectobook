@@ -12,3 +12,8 @@
 *.dex
 /app/build
 /app/release
+
+# Design review runs: screenshots taken from the emulator, and the notes
+# written against them. Regenerated whenever a review runs, and heavy enough
+# in PNGs that the history is better off without them.
+/reviews
