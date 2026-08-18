@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -93,7 +94,7 @@ fun GoToPageSheet(
                 IndustryTextField(
                     value = text,
                     onValueChange = { text = it.filter(Char::isDigit).take(6) },
-                    placeholder = "Page number",
+                    placeholder = stringResource(R.string.goto_page_number),
                     modifier = Modifier.weight(1f),
                     height = 44.dp,
                     fontSize = 17.sp,
@@ -125,7 +126,7 @@ private fun JumpButton(enabled: Boolean, onClick: () -> Unit) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "JUMP",
+            text = upperStringResource(R.string.goto_jump),
             style = MaterialTheme.typography.labelLarge,
             color = IndustryBackground.copy(alpha = alpha),
         )

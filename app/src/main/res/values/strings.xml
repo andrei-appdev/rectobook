@@ -1,3 +1,97 @@
 <resources>
     <string name="app_name">DjVu Reader</string>
+
+    <!--
+      Labels the design sets in capitals are held here in sentence case and
+      uppercased when drawn, by the rules of the reader's own language. Baking
+      the capitals in would hand a translator a casing decision that is not
+      theirs to make, and would get Turkish and Greek wrong.
+    -->
+
+    <!-- Library -->
+    <string name="library_title">DjVu Reader</string>
+    <string name="library_about">About this app</string>
+    <string name="library_open_file">Open file</string>
+    <string name="library_recent">Recent</string>
+    <string name="library_last_opened">Last opened</string>
+    <string name="library_finished">Done</string>
+    <string name="library_page_marker">P.%1$d</string>
+    <string name="library_not_measured">Not yet measured</string>
+    <plurals name="library_page_count">
+        <item quantity="one">%1$d p</item>
+        <item quantity="other">%1$d pp</item>
+    </plurals>
+
+    <!-- File sizes. The unit is part of the string: it is not "MB" everywhere. -->
+    <string name="size_gb">%1$s GB</string>
+    <string name="size_mb">%1$s MB</string>
+    <string name="size_kb">%1$s KB</string>
+
+    <!-- Reader -->
+    <string name="reader_back_to_library">Back to library</string>
+    <string name="reader_clear_search">Clear search</string>
+    <string name="reader_title_search">Search “%1$s”</string>
+    <string name="reader_contents">Contents</string>
+    <string name="reader_page_of">%1$d / %2$d</string>
+    <string name="reader_page_number">%1$d</string>
+    <string name="reader_page_description">Page %1$d</string>
+    <string name="reader_page_slider">Page slider</string>
+    <string name="reader_zoom_in">Zoom in</string>
+    <string name="reader_zoom_out">Zoom out</string>
+    <string name="reader_zoom_percent">%1$d%%</string>
+    <string name="reader_copy">Copy</string>
+    <string name="reader_copy_description">Copy selected text</string>
+
+    <!-- Search -->
+    <string name="search_in_document">Search in document</string>
+    <string name="search_close">Close search</string>
+    <string name="search_type_to_search">Type to search</string>
+    <string name="search_keep_typing">Keep typing</string>
+    <string name="search_scanning">Searching %1$d / %2$d</string>
+    <string name="search_no_text_layer">No text layer in this document</string>
+    <string name="search_no_matches">No matches for “%1$s”</string>
+    <string name="search_stopped_at">Stopped at %1$d matches. Narrow the search to see the rest.</string>
+    <string name="search_hit_page">p.%1$d</string>
+    <!--
+      Whole sentences rather than a count glued to a phrase: word order and
+      agreement differ, and a language that puts the query first cannot be
+      assembled from pieces chosen here.
+    -->
+    <plurals name="search_matches">
+        <item quantity="one">%1$d match for “%2$s”</item>
+        <item quantity="other">%1$d matches for “%2$s”</item>
+    </plurals>
+    <plurals name="search_matches_so_far">
+        <item quantity="one">%1$d match for “%2$s” so far</item>
+        <item quantity="other">%1$d matches for “%2$s” so far</item>
+    </plurals>
+    <string name="search_matches_capped">%1$d+ matches for “%2$s”</string>
+    <string name="search_matches_capped_so_far">%1$d+ matches for “%2$s” so far</string>
+
+    <!-- Contents -->
+    <string name="outline_title">Contents</string>
+    <string name="outline_close">Close contents</string>
+    <string name="outline_page">%1$d</string>
+
+    <!-- Go to page -->
+    <string name="goto_page_number">Page number</string>
+    <string name="goto_jump">Jump</string>
+
+    <!-- Following a link out of the document -->
+    <string name="link_leave_document">Leave this document</string>
+    <string name="link_cancel">Cancel</string>
+    <string name="link_open">Open</string>
+
+    <!-- About -->
+    <string name="about_title">About</string>
+    <string name="about_version">Version %1$s</string>
+
+    <!-- Opening a document that will not open -->
+    <string name="error_open_document">Could not open document:\n%1$s</string>
+    <string name="error_choose_another_file">Choose another file</string>
+    <string name="error_not_a_document">This is not a DjVu or PDF document.</string>
+    <string name="error_unreadable_djvu">This DjVu file could not be read.</string>
+    <string name="error_password_protected">This PDF is password-protected.</string>
+    <string name="error_cannot_read">The file could not be read.</string>
+    <string name="error_empty_file">The file is empty.</string>
 </resources>

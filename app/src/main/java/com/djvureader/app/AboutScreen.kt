@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
@@ -39,8 +40,11 @@ fun AboutScreen(onBack: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            IconAction(BackIcon, "Back to library", onBack)
-            Text(text = "About", style = MaterialTheme.typography.titleLarge)
+            IconAction(BackIcon, stringResource(R.string.reader_back_to_library), onBack)
+            Text(
+                text = stringResource(R.string.about_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
         }
         Hairline()
 
@@ -51,12 +55,12 @@ fun AboutScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Text(
-                text = "DJVU READER",
+                text = upperStringResource(R.string.library_title),
                 style = MaterialTheme.typography.headlineLarge,
                 textAlign = TextAlign.Center,
             )
             Text(
-                text = "VERSION $AppVersion",
+                text = upperStringResource(R.string.about_version, AppVersion),
                 style = MaterialTheme.typography.bodySmall,
                 letterSpacing = 0.1.em,
                 color = onSurfaceAlpha(0.45f),

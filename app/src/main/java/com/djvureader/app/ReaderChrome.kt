@@ -39,6 +39,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -256,8 +257,8 @@ fun ReaderTopBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
             )
-            onContents?.let { IconAction(ContentsIcon, "Contents", it) }
-            IconAction(SearchIcon, "Search in document", onSearch)
+            onContents?.let { IconAction(ContentsIcon, stringResource(R.string.reader_contents), it) }
+            IconAction(SearchIcon, stringResource(R.string.search_in_document), onSearch)
         }
         Hairline()
     }
@@ -307,7 +308,7 @@ fun ReaderBottomBar(
             ) {
                 StrokeIcon(PagesIcon, size = 15.dp)
                 Text(
-                    text = "$currentPage / $pageCount",
+                    text = stringResource(R.string.reader_page_of, currentPage, pageCount),
                     style = MaterialTheme.typography.labelLarge.copy(
                         letterSpacing = 0.04.em,
                         fontFeatureSettings = TabularNums,
@@ -327,7 +328,12 @@ fun ReaderBottomBar(
                 modifier = Modifier.border(1.dp, IndustryDivider),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                SegButton(MinusIcon, "Zoom out", enabled = canZoomOut, onClick = onZoomOut)
+                SegButton(
+                    MinusIcon,
+                    stringResource(R.string.reader_zoom_out),
+                    enabled = canZoomOut,
+                    onClick = onZoomOut,
+                )
                 SegDivider()
                 Box(
                     modifier = Modifier
@@ -348,7 +354,12 @@ fun ReaderBottomBar(
                     )
                 }
                 SegDivider()
-                SegButton(PlusIcon, "Zoom in", enabled = canZoomIn, onClick = onZoomIn)
+                SegButton(
+                    PlusIcon,
+                    stringResource(R.string.reader_zoom_in),
+                    enabled = canZoomIn,
+                    onClick = onZoomIn,
+                )
             }
         }
     }
@@ -387,11 +398,14 @@ private fun PageSlider(
     // the other.
     val fraction = if (pageCount > 1) (page - 1).toFloat() / (pageCount - 1) else 0f
 
+    // Read out here: the semantics block is not a composable scope.
+    val sliderLabel = stringResource(R.string.reader_page_slider)
+
     Canvas(
         modifier = modifier
             .height(20.dp)
             .semantics {
-                contentDescription = "Page slider"
+                contentDescription = sliderLabel
                 progressBarRangeInfo = ProgressBarRangeInfo(
                     current = page.toFloat(),
                     range = 1f..pageCount.toFloat().coerceAtLeast(1f),

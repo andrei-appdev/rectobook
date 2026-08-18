@@ -20,7 +20,7 @@ object DocumentImporter {
 
     private const val IMPORT_DIR = "documents"
 
-    /** Copies [uri] into cache storage. Throws [IOException] if it cannot be read. */
+    /** Copies [uri] into cache storage. Throws [DocumentException] if it cannot be read. */
     fun import(context: Context, uri: Uri): LocalDocument {
         val directory = File(context.cacheDir, IMPORT_DIR).apply { mkdirs() }
         val target = File(directory, importedName(uri))
@@ -29,10 +29,10 @@ object DocumentImporter {
         // stale cache entry would silently serve the old document.
         context.contentResolver.openInputStream(uri)?.use { input ->
             target.outputStream().use { output -> input.copyTo(output) }
-        } ?: throw IOException("Cannot open $uri")
+        } ?: throw DocumentException(DocumentFailure.CannotRead)
 
         if (target.length() == 0L) {
-            throw IOException("$uri produced an empty file")
+            throw DocumentException(DocumentFailure.EmptyFile)
         }
         return LocalDocument(file = target, displayName = displayName(context, uri))
     }

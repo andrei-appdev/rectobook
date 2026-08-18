@@ -34,6 +34,8 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.djvureader.app.ui.theme.IndustryAccent
@@ -44,7 +46,6 @@ import com.djvureader.app.ui.theme.SectionLabel
 import com.djvureader.app.ui.theme.TabularNums
 import com.djvureader.app.ui.theme.ink
 import com.djvureader.app.ui.theme.onSurfaceAlpha
-import java.util.Locale
 
 /**
  * The library, styled after the design's first screen: wordmark, a single
@@ -78,17 +79,17 @@ fun LibraryScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = "DJVU READER",
+                    text = upperStringResource(R.string.library_title),
                     style = MaterialTheme.typography.headlineLarge,
                 )
-                IconAction(InfoIcon, "About this app", onAbout, size = 18.dp)
+                IconAction(InfoIcon, stringResource(R.string.library_about), onAbout, size = 18.dp)
             }
         }
 
         item {
             PrimaryAction(
                 icon = FolderIcon,
-                label = "OPEN FILE",
+                label = upperStringResource(R.string.library_open_file),
                 onClick = onPick,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             )
@@ -100,9 +101,13 @@ fun LibraryScreen(
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Text(text = "RECENT", style = SectionLabel, modifier = Modifier.alignByBaseline())
                     Text(
-                        text = "Last opened",
+                        text = upperStringResource(R.string.library_recent),
+                        style = SectionLabel,
+                        modifier = Modifier.alignByBaseline(),
+                    )
+                    Text(
+                        text = stringResource(R.string.library_last_opened),
                         style = MaterialTheme.typography.labelMedium,
                         color = onSurfaceAlpha(0.45f),
                         modifier = Modifier.alignByBaseline(),
@@ -185,7 +190,11 @@ private fun RecentCard(
                     )
                 }
                 Text(
-                    text = if (document.isFinished) "DONE" else "P.${document.lastPage + 1}",
+                    text = if (document.isFinished) {
+                        upperStringResource(R.string.library_finished)
+                    } else {
+                        stringResource(R.string.library_page_marker, document.lastPage + 1)
+                    },
                     style = MaterialTheme.typography.labelSmall
                         .copy(fontFeatureSettings = TabularNums),
                     color = IndustryAccent700,
@@ -310,18 +319,30 @@ private fun DrawScope.stripes(
     }
 }
 
+@Composable
 private fun documentMeta(document: RecentDocument): String = buildList {
     document.format?.let { add(it.label) }
-    if (document.pageCount > 0) add("${document.pageCount} pp")
+    if (document.pageCount > 0) {
+        add(pluralStringResource(R.plurals.library_page_count, document.pageCount, document.pageCount))
+    }
     if (document.sizeBytes > 0) add(formatSize(document.sizeBytes))
-}.joinToString(" · ").ifEmpty { "Not yet measured" }
+}.joinToString(" · ").ifEmpty { stringResource(R.string.library_not_measured) }
 
+/**
+ * A file size in the reader's own language: the unit is a word, and the decimal
+ * separator is a comma in most of Europe.
+ */
+@Composable
 private fun formatSize(bytes: Long): String {
+    val locale = readingLocale()
     val mb = bytes / 1024.0 / 1024.0
     return when {
-        mb >= 1024 -> String.format(Locale.US, "%.1f GB", mb / 1024)
-        mb >= 10 -> String.format(Locale.US, "%.0f MB", mb)
-        mb >= 0.1 -> String.format(Locale.US, "%.1f MB", mb)
-        else -> String.format(Locale.US, "%d KB", (bytes / 1024).coerceAtLeast(1))
+        mb >= 1024 -> stringResource(R.string.size_gb, String.format(locale, "%.1f", mb / 1024))
+        mb >= 10 -> stringResource(R.string.size_mb, String.format(locale, "%.0f", mb))
+        mb >= 0.1 -> stringResource(R.string.size_mb, String.format(locale, "%.1f", mb))
+        else -> stringResource(
+            R.string.size_kb,
+            String.format(locale, "%d", (bytes / 1024).coerceAtLeast(1)),
+        )
     }
 }

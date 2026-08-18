@@ -243,8 +243,8 @@ class PdfDocument private constructor(
         private const val TOUCH_TOLERANCE = 0.01
 
         /**
-         * Opens [file] as a PDF, throwing [IOException] with something worth
-         * showing if it cannot be.
+         * Opens [file] as a PDF, throwing [DocumentException] naming what went
+         * wrong if it cannot be.
          */
         fun open(context: Context, file: File): PdfDocument {
             val descriptor = ParcelFileDescriptor.open(
@@ -256,7 +256,7 @@ class PdfDocument private constructor(
                 PdfDocument(document, descriptor)
             } catch (passworded: PdfPasswordException) {
                 runCatching { descriptor.close() }
-                throw IOException("This PDF is password-protected.", passworded)
+                throw DocumentException(DocumentFailure.PasswordProtected, passworded)
             } catch (failure: Throwable) {
                 runCatching { descriptor.close() }
                 throw failure

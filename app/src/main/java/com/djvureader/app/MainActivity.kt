@@ -84,6 +84,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Density
@@ -228,19 +229,23 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
         is ReaderState.Loading -> Centered { CircularProgressIndicator() }
 
         is ReaderState.Error -> Centered {
+            // This screen has no arrow of its own to mirror, and without a
+            // handler back would leave the app from it - which is the one way
+            // out a failed open should not be.
+            BackHandler { viewModel.closeDocument() }
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(horizontal = 18.dp),
             ) {
                 Text(
-                    text = "Could not open document:\n${current.message}",
+                    text = stringResource(R.string.error_open_document, current.failure.text()),
                     textAlign = TextAlign.Center,
                 )
                 // The same block the library opens files with. Nothing here is
                 // a lesser action for being on an error screen.
                 PrimaryAction(
                     icon = FolderIcon,
-                    label = "CHOOSE ANOTHER FILE",
+                    label = upperStringResource(R.string.error_choose_another_file),
                     onClick = openDocument,
                     modifier = Modifier.fillMaxWidth().padding(top = 20.dp),
                 )
@@ -657,15 +662,24 @@ private fun DocumentReader(
 
         // Live during a pinch, so the readout tracks the fingers rather than
         // jumping when they lift.
-        val zoomLabel = "${(zoom * gestureScale * 100).roundToInt()}%"
+        val zoomLabel = stringResource(
+            R.string.reader_zoom_percent,
+            (zoom * gestureScale * 100).roundToInt(),
+        )
 
         ReaderTopBar(
             // The term goes in the title, where the document's name would be:
             // what is on screen is this search, and the page is full of marks
             // that only mean anything once you know what was looked for.
-            title = if (searching) "Search “${searchResults.query}”" else state.title,
+            title = if (searching) {
+                stringResource(R.string.reader_title_search, searchResults.query)
+            } else {
+                state.title
+            },
             hidden = chromeHidden,
-            backLabel = if (searching) "Clear search" else "Back to library",
+            backLabel = stringResource(
+                if (searching) R.string.reader_clear_search else R.string.reader_back_to_library,
+            ),
             onBack = if (searching) ({ endSearch() }) else onBack,
             onSearch = {
                 viewModel.clearSelection()
@@ -945,7 +959,7 @@ private fun PageView(
         val current = bitmap
         if (current == null) {
             Text(
-                text = "${pageNumber + 1}",
+                text = stringResource(R.string.reader_page_number, pageNumber + 1),
                 style = MaterialTheme.typography.labelMedium
                     .copy(fontFeatureSettings = TabularNums),
                 // On the page's own white, so it takes paper ink rather than
@@ -955,7 +969,7 @@ private fun PageView(
         } else {
             Image(
                 bitmap = current.asImageBitmap(),
-                contentDescription = "Page ${pageNumber + 1}",
+                contentDescription = stringResource(R.string.reader_page_description, pageNumber + 1),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
             )
@@ -1048,11 +1062,17 @@ private fun CopyBlock(onCopy: () -> Unit, modifier: Modifier = Modifier) {
             .size(width = CopyBlockWidth, height = CopyBlockHeight)
             .background(IndustryBackground.copy(alpha = 0.96f))
             .border(1.dp, IndustryDivider)
-            .clickable(onClickLabel = "Copy selected text", onClick = onCopy),
+            .clickable(
+                onClickLabel = stringResource(R.string.reader_copy_description),
+                onClick = onCopy,
+            ),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
-        Text(text = "COPY", style = MaterialTheme.typography.labelLarge)
+        Text(
+            text = upperStringResource(R.string.reader_copy),
+            style = MaterialTheme.typography.labelLarge,
+        )
     }
 }
 

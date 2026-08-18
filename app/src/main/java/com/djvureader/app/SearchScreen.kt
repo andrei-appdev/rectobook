@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
@@ -72,11 +74,11 @@ fun SearchScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            IconAction(BackIcon, "Close search", onClose)
+            IconAction(BackIcon, stringResource(R.string.search_close), onClose)
             IndustryTextField(
                 value = query,
                 onValueChange = onQueryChange,
-                placeholder = "Search in document",
+                placeholder = stringResource(R.string.search_in_document),
                 modifier = Modifier.weight(1f),
                 height = 38.dp,
                 autoFocus = true,
@@ -103,7 +105,7 @@ fun SearchScreen(
             }
             if (results.truncated) {
                 item {
-                    Note("Stopped at $MAX_HITS matches. Narrow the search to see the rest.")
+                    Note(stringResource(R.string.search_stopped_at, MAX_HITS))
                 }
             }
         }
@@ -115,19 +117,34 @@ fun SearchScreen(
  * match count; the other states are ours, because a real document can have no
  * text layer at all and a real scan takes time.
  */
+@Composable
 private fun statusLine(results: SearchResults): String = when {
-    results.query.isEmpty() -> "Type to search"
-    results.query.length < MIN_QUERY_LENGTH -> "Keep typing"
+    results.query.isEmpty() -> stringResource(R.string.search_type_to_search)
+    results.query.length < MIN_QUERY_LENGTH -> stringResource(R.string.search_keep_typing)
     results.running && results.hits.isEmpty() ->
-        "Searching ${results.scannedPages} / ${results.pageCount}"
-    results.hits.isEmpty() && !results.hasTextLayer -> "No text layer in this document"
-    results.hits.isEmpty() -> "No matches for “${results.query}”"
-    else -> {
-        val count = if (results.truncated) "${results.hits.size}+" else "${results.hits.size}"
-        val matches = if (results.hits.size == 1) "1 match" else "$count matches"
-        val suffix = if (results.running) " so far" else ""
-        "$matches$suffix for “${results.query}”"
-    }
+        stringResource(R.string.search_scanning, results.scannedPages, results.pageCount)
+    results.hits.isEmpty() && !results.hasTextLayer ->
+        stringResource(R.string.search_no_text_layer)
+    results.hits.isEmpty() -> stringResource(R.string.search_no_matches, results.query)
+    // Each of these is a whole sentence rather than a count with a phrase
+    // glued on. The count agrees with the noun in most languages, and the
+    // query does not always come last.
+    results.truncated && results.running ->
+        stringResource(R.string.search_matches_capped_so_far, results.hits.size, results.query)
+    results.truncated ->
+        stringResource(R.string.search_matches_capped, results.hits.size, results.query)
+    results.running -> pluralStringResource(
+        R.plurals.search_matches_so_far,
+        results.hits.size,
+        results.hits.size,
+        results.query,
+    )
+    else -> pluralStringResource(
+        R.plurals.search_matches,
+        results.hits.size,
+        results.hits.size,
+        results.query,
+    )
 }
 
 @Composable
@@ -141,7 +158,7 @@ private fun HitRow(hit: SearchHit, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
-                text = "p.${hit.page + 1}",
+                text = stringResource(R.string.search_hit_page, hit.page + 1),
                 style = TextStyle(
                     fontFamily = HeadingFont,
                     fontWeight = FontWeight.SemiBold,

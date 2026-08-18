@@ -31,7 +31,7 @@ sealed interface ReaderState {
 
     data object Loading : ReaderState
 
-    data class Error(val message: String) : ReaderState
+    data class Error(val failure: DocumentFailure) : ReaderState
 
     data class Loaded(
         val title: String,
@@ -273,7 +273,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                     )
                 },
                 onFailure = { error ->
-                    _state.value = ReaderState.Error(error.message ?: error.toString())
+                    _state.value = ReaderState.Error(error.documentFailure())
                 },
             )
         }

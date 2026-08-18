@@ -21,6 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.djvureader.app.ui.theme.IndustryAccent
@@ -62,7 +63,7 @@ fun OpenLinkSheet(
                     .padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 18.dp),
             ) {
                 Text(
-                    text = "LEAVE THIS DOCUMENT",
+                    text = upperStringResource(R.string.link_leave_document),
                     style = SectionLabel,
                     color = onSurfaceAlpha(0.55f),
                 )
@@ -77,12 +78,12 @@ fun OpenLinkSheet(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     SheetAction(
-                        label = "CANCEL",
+                        label = upperStringResource(R.string.link_cancel),
                         onClick = onDismiss,
                         modifier = Modifier.weight(1f),
                     )
                     SheetAction(
-                        label = "OPEN",
+                        label = upperStringResource(R.string.link_open),
                         onClick = onOpen,
                         filled = true,
                         modifier = Modifier.weight(1f),

@@ -211,17 +211,17 @@ fun PagedDocument.renderPageToFit(pageNumber: Int, maxWidth: Int, maxHeight: Int
 /**
  * Opens [file] with the backend its own bytes call for.
  *
- * Throws [IOException] with a message worth showing, which is the whole reason
+ * Throws [DocumentException] naming what went wrong, which is the whole reason
  * this is not a nullable return: "not a document we can read" and "a DjVu file
  * we failed on" are different things to be told.
  */
 fun openDocument(context: Context, file: File): PagedDocument = when (DocumentFormat.of(file)) {
     DocumentFormat.Djvu ->
-        DjvuDocument.open(file) ?: throw IOException("This DjVu file could not be read.")
+        DjvuDocument.open(file) ?: throw DocumentException(DocumentFailure.UnreadableDjvu)
 
     DocumentFormat.Pdf ->
         PdfDocument.open(context, file)
 
     null ->
-        throw IOException("This is not a DjVu or PDF document.")
+        throw DocumentException(DocumentFailure.NotADocument)
 }
