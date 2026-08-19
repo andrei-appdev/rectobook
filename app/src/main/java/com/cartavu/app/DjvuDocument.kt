@@ -49,15 +49,17 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
         var at = 0
         for (word in words) {
             val wordEnd = at + word.text.length
-            // Any overlap at all: a match usually starts or ends mid-word, and
-            // marking the whole word is what a highlighter does anyway.
+            // Any overlap at all, clipped to what is covered for an entry that
+            // holds a whole line rather than one word.
             if (wordEnd > start && at < end) {
+                val (from, to) = word.span(start - at, end - at)
+                val boxWidth = (word.right - word.left).toFloat()
                 rects += PageRect(
-                    left = word.left.toFloat() / size.width,
+                    left = (word.left + from * boxWidth) / size.width,
                     // DjVu measures from the bottom of the page, Android from
                     // the top.
                     top = 1f - word.top.toFloat() / size.height,
-                    right = word.right.toFloat() / size.width,
+                    right = (word.left + to * boxWidth) / size.width,
                     bottom = 1f - word.bottom.toFloat() / size.height,
                 )
             }
@@ -93,7 +95,7 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
         for (word in words) {
             val height = (word.top - word.bottom).toFloat().coerceAtLeast(1f)
             val insideY = py >= word.bottom && py <= word.top
-            if (insideY && px >= word.left && px <= word.right) return at
+            if (insideY && px >= word.left && px <= word.right) return at + word.offsetAt(px)
 
             // Distance to the box, counted as zero along an axis already
             // inside it, so a point beside a word beats one a line away.
@@ -102,7 +104,7 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
             val distance = dx + dy * LINE_MISS_WEIGHT
             if (distance < nearestDistance && dy <= height) {
                 nearestDistance = distance
-                nearest = at
+                nearest = at + word.offsetAt(px)
             }
             at += word.text.length + 1
         }
@@ -200,7 +202,48 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
         val bottom: Int,
         val right: Int,
         val top: Int,
-    )
+    ) {
+        /** Whether this entry holds a whole line rather than a single word. */
+        val isRun = text.indexOf(' ') >= 0
+
+        /**
+         * How far into this entry's text a point lies, as a character offset.
+         *
+         * ddjvu is asked for word-level detail, but what it returns is the
+         * deepest zone that carries a string, and some files only go down to
+         * lines. Answering with the start of the entry then pins every point on
+         * such a line to its first word - the selection cannot be dragged,
+         * because every position along it picks the same word out.
+         *
+         * Interpolating across the box assumes even character widths, which
+         * proportional type is not, so this lands a character or two out on a
+         * long line. That is enough: the caller widens the result to the word
+         * around it. For an entry that really is one word, every offset is
+         * inside that word and the caller's answer is unchanged.
+         */
+        fun offsetAt(px: Float): Int {
+            val width = (right - left).toFloat()
+            if (width <= 0f || text.isEmpty()) return 0
+            val across = ((px - left) / width).coerceIn(0f, 1f)
+            return (across * text.length).toInt().coerceAtMost(text.length - 1)
+        }
+
+        /**
+         * The part of this entry's box that characters [from] until [to] of it
+         * cover, as a fraction of the box from its left edge.
+         *
+         * A single word is always covered whole: a match usually starts or ends
+         * mid-word, and marking the whole word is what a highlighter does
+         * anyway. A line cannot be treated that way - marking it whole would
+         * paint the entire line for a selection of one word in it.
+         */
+        fun span(from: Int, to: Int): Pair<Float, Float> {
+            if (!isRun || text.isEmpty()) return 0f to 1f
+            val length = text.length.toFloat()
+            return from.coerceIn(0, text.length) / length to
+                to.coerceIn(0, text.length) / length
+        }
+    }
 
     /**
      * The page's words, decoded from what the JNI packed.

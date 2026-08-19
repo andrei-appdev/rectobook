@@ -25,6 +25,20 @@ private val PdfiumLock = Any()
 private inline fun <T> locked(block: () -> T): T = synchronized(PdfiumLock, block)
 
 /**
+ * Whether PDFium put this character in a page's text rather than the page did.
+ *
+ * U+FFFE marks a hyphen PDFium generated to break a word across lines, and
+ * dropping it joins the word back up - which is both what the reader means by
+ * copying it and what makes a search for the unbroken word find the page. The
+ * rest are the encoding failing: a glyph the page's font gave no Unicode for
+ * arrives as U+0000 or U+0001. Tab and the two line breaks are real text and
+ * the only C0 characters kept.
+ */
+private fun Char.isPdfiumMark(): Boolean =
+    this == '\uFFFE' || this == '\uFFFF' ||
+        (code < 0x20 && this != '\n' && this != '\r' && this != '\t')
+
+/**
  * An open PDF, decoded by PDFium.
  *
  * Pages are opened per call rather than held: PDFium page handles are cheap to
@@ -104,16 +118,70 @@ class PdfDocument private constructor(
      * The page's text. Unlike a scan's, this is usually the document's own text
      * rather than an OCR pass over a picture of it, so it is exact.
      */
-    override fun pageText(pageNumber: Int): String? = locked {
-        if (closed) return@locked null
-        runCatching {
+    override fun pageText(pageNumber: Int): String? = locked { textOf(pageNumber)?.text }
+
+    /**
+     * A page's text with PDFium's own marks taken out of it, and the map back
+     * to the indices PDFium answers in.
+     *
+     * What `FPDFText_GetText` returns is not only the page's characters: a
+     * hyphen PDFium generated at a line break comes back as U+FFFE, and a
+     * character the page's encoding did not resolve as U+0000 or U+0001. None
+     * of them are whitespace, so nothing downstream drops them - they reach the
+     * clipboard, draw as tofu in a search snippet, and stop "структуры"
+     * matching a page that breaks it as "структу-ры".
+     *
+     * Dropping them means this class's indices are no longer PDFium's, so
+     * [toRaw] carries the way back for the calls that are asked in ours and
+     * answered in PDFium's.
+     */
+    private class PageText(val pageNumber: Int, val text: String, val toRaw: IntArray) {
+        /** Where clean index [at] sits in PDFium's numbering. */
+        fun raw(at: Int): Int =
+            if (toRaw.isEmpty()) 0 else toRaw[at.coerceIn(0, toRaw.lastIndex)]
+
+        /**
+         * Where PDFium's index [at] sits in ours, or the nearest kept character
+         * if [at] is one of the marks that was dropped.
+         */
+        fun clean(at: Int): Int {
+            if (toRaw.isEmpty()) return 0
+            val found = toRaw.binarySearch(at)
+            return if (found >= 0) found else (-found - 1).coerceIn(0, toRaw.lastIndex)
+        }
+    }
+
+    /**
+     * Held for the page last asked about: a drag asks for rectangles on every
+     * frame, and each would otherwise reopen the page and re-extract its text.
+     */
+    private var lastText: PageText? = null
+
+    private fun textOf(pageNumber: Int): PageText? {
+        if (closed) return null
+        lastText?.let { if (it.pageNumber == pageNumber) return it }
+        val built = runCatching {
             document.openPage(pageNumber).use { page ->
                 document.openTextPage(page).use { text ->
                     val characters = text.textPageCountChars()
-                    if (characters <= 0) "" else text.textPageGetText(0, characters).orEmpty()
+                    val raw = if (characters <= 0) {
+                        ""
+                    } else {
+                        text.textPageGetText(0, characters).orEmpty()
+                    }
+                    val kept = StringBuilder(raw.length)
+                    val toRaw = IntArray(raw.length)
+                    for (index in raw.indices) {
+                        if (raw[index].isPdfiumMark()) continue
+                        toRaw[kept.length] = index
+                        kept.append(raw[index])
+                    }
+                    PageText(pageNumber, kept.toString(), toRaw.copyOf(kept.length))
                 }
             }
-        }.getOrNull()
+        }.getOrNull() ?: return null
+        lastText = built
+        return built
     }
 
     /**
@@ -122,6 +190,13 @@ class PdfDocument private constructor(
      */
     override fun textRects(pageNumber: Int, start: Int, end: Int): List<PageRect> = locked {
         if (closed || end <= start) return@locked emptyList()
+        val mapped = textOf(pageNumber) ?: return@locked emptyList()
+        if (mapped.text.isEmpty() || start >= mapped.text.length) return@locked emptyList()
+        // Back into PDFium's numbering. A mark dropped in the middle of the
+        // range stays inside it, which is what a highlight wants: the hyphen
+        // U+FFFE stood for is drawn on the page and belongs under the mark.
+        val rawStart = mapped.raw(start)
+        val rawEnd = mapped.raw(end - 1) + 1
         runCatching {
             document.openPage(pageNumber).use { page ->
                 val width = page.getPageWidthPoint().toFloat()
@@ -129,8 +204,8 @@ class PdfDocument private constructor(
                 if (width <= 0f || height <= 0f) return@use emptyList()
 
                 document.openTextPage(page).use { text ->
-                    val count = end - start
-                    (0 until text.textPageCountRects(start, count)).mapNotNull { index ->
+                    val count = rawEnd - rawStart
+                    (0 until text.textPageCountRects(rawStart, count)).mapNotNull { index ->
                         text.textPageGetRect(index)?.let { rect ->
                             PageRect(
                                 left = rect.left / width,
@@ -168,7 +243,9 @@ class PdfDocument private constructor(
                         width * TOUCH_TOLERANCE,
                         height * TOUCH_TOLERANCE,
                     )
-                    index.takeIf { it >= 0 }
+                    // PDFium answers in its own numbering, which counts the
+                    // marks this class drops.
+                    index.takeIf { it >= 0 }?.let { textOf(pageNumber)?.clean(it) }
                 }
             }
         }.getOrNull()
@@ -224,6 +301,7 @@ class PdfDocument private constructor(
     override fun close() = locked {
         if (!closed) {
             closed = true
+            lastText = null
             // The document owns the descriptor and closes it, but saying so
             // twice is harmless and saying it never is a leaked fd.
             runCatching { document.close() }
