@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     The CartaVu mark: the lettermark on its plate, over the rule that stands
+     in for the line of text it sits on.
+
+     Drawn on the 108dp adaptive canvas and held to a 46dp plate, so that the
+     plate's corners clear the 66dp safe circle every mask guarantees - a
+     square sized to fill that circle would have lost them.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- The plate. -->
+    <path
+        android:pathData="M31,31h46v46h-46z"
+        android:strokeColor="#94BCE3"
+        android:strokeWidth="2.2"
+        android:strokeLineJoin="miter" />
+
+    <!-- The C, Fira Sans Condensed SemiBold reduced to an outline - a vector
+         drawable has no text element, and the launcher must not depend on a
+         font being installed at all. -->
+    <path
+        android:pathData="M64.986 40.214L61.719 44.096Q60.393 42.96 59.114 42.415Q57.836 41.871 56.368 41.871Q49.786 41.871 49.786 53.804Q49.786 59.96 51.538 62.801Q53.29 65.642 56.415 65.642Q58.072 65.642 59.351 64.979Q60.629 64.316 62.145 63.085L65.317 66.921Q63.66 68.72 61.292 69.856Q58.925 70.993 56.036 70.993Q52.011 70.993 49.004 69.075Q45.997 67.157 44.34 63.298Q42.683 59.439 42.683 53.804Q42.683 48.264 44.387 44.428Q46.092 40.592 49.123 38.651Q52.153 36.709 55.989 36.709Q58.735 36.709 60.866 37.585Q62.997 38.461 64.986 40.214Z"
+        android:fillColor="#F2F2F3" />
+
+    <!-- The baseline rule, running out of the C's aperture to the plate edge. -->
+    <path
+        android:pathData="M62.1176,66.1765H77"
+        android:strokeColor="#94BCE3"
+        android:strokeWidth="2.7059"
+        android:strokeLineCap="butt" />
+</vector>

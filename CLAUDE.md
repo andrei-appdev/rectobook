@@ -108,4 +108,7 @@ string in a Preferences DataStore, keyed by the persisted content URI.
 - `licenses/` — bundled font licences. DjVuLibre is GPLv2+, so the combined work
   is GPL once distributed; the project has accepted that rather than isolating
   the decoder. A top-level `LICENSE` is still outstanding.
+- `store/` — artwork for the Play listing. `play-icon-512.png` is the launcher
+  mark rendered off the same geometry as `res/drawable/ic_launcher_foreground.xml`,
+  at the full 108dp canvas rather than the crop a launcher mask shows.
 - `/reviews` is gitignored — design/QA review runs with their screenshots.

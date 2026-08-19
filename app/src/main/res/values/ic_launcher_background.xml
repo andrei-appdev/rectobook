@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The launcher's background layer. Flat accent, no gradient and no marks:
+         the layer is parallaxed and masked by the launcher, and anything drawn
+         on it moves against the mark. Not in the theme's colour set - this one
+         is the same in light and dark, because the launcher is neither. -->
+    <color name="ic_launcher_background">#5980A6</color>
+</resources>
