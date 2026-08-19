@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import java.io.File
 

@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Composable

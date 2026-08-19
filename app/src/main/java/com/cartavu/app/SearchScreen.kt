@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,13 +32,13 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.djvureader.app.ui.theme.HeadingFont
-import com.djvureader.app.ui.theme.IndustryAccent
-import com.djvureader.app.ui.theme.IndustryAccent700
-import com.djvureader.app.ui.theme.IndustryBackground
-import com.djvureader.app.ui.theme.SectionLabel
-import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.onSurfaceAlpha
+import com.cartavu.app.ui.theme.HeadingFont
+import com.cartavu.app.ui.theme.IndustryAccent
+import com.cartavu.app.ui.theme.IndustryAccent700
+import com.cartavu.app.ui.theme.IndustryBackground
+import com.cartavu.app.ui.theme.SectionLabel
+import com.cartavu.app.ui.theme.TabularNums
+import com.cartavu.app.ui.theme.onSurfaceAlpha
 
 /**
  * In-document search: a field, a count, and the hits with the term marked in

@@ -1,0 +1,111 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What this is
+
+An Android DjVu + PDF reader (`com.djvureader.app`), Kotlin + Jetpack Compose,
+with DjVuLibre vendored as C++ under `app/src/main/cpp/djvulibre` and reached
+through a hand-written JNI layer. PDF goes through the prebuilt
+`io.legere:pdfiumandroid` AAR instead — PDFium builds via GN/depot_tools, which
+is a project of its own.
+
+Single Gradle module `:app`, minSdk 24 / targetSdk 35, one activity, no
+fragments, no DI framework, no navigation library.
+
+## Build and run
+
+`JAVA_HOME` is not set in this environment and Gradle fails outright without it.
+Android Studio's bundled JBR is Java 25, which AGP rejects with a message that
+is only the version number. Use the 21 JDK, and give Gradle an absolute project
+path — the wrapper is not on `PATH`:
+
+```powershell
+$env:JAVA_HOME = 'C:\Users\Andrei\.jdks\jbr-21.0.11'
+& 'C:\Projects\djvu_reader\gradlew.bat' -p C:\Projects\djvu_reader :app:assembleDebug --console=plain -q
+```
+
+The `$env:` assignment does not persist between tool calls — repeat it, or chain
+build and install in one call. A clean build compiles DjVuLibre for three ABIs
+and takes minutes; an incremental Kotlin build is seconds.
+
+For installing, launching, screenshotting and driving the UI on the emulator,
+**use the `run-on-emulator` skill** (`.claude/skills/run-on-emulator/`) — it
+carries the adb paths, the coordinate scaling, and the quirks that cost time
+(screenshots must be piped through Bash; PowerShell corrupts the PNG).
+
+There are no test source sets. `app/src/` contains only `main/`, although the
+JUnit/Espresso/Compose-test dependencies are declared. Adding a test means
+creating `app/src/test/` or `app/src/androidTest/` first.
+
+## Architecture
+
+**Format abstraction.** `PagedDocument` (`PagedDocument.kt`) is the whole of what
+the reader needs from a file format: page count, page size, render, render
+region, page text, text rects, char-at-point, links, outline. `DjvuDocument` and
+`PdfDocument` implement it; `openDocument()` sniffs the bytes via
+`DocumentFormat.of(file)` and picks one. Anything format-specific belongs behind
+this interface — the reader UI never branches on format except to name it.
+
+Geometry crossing this boundary is in **fractions of the page** (`PageRect`), not
+pixels, because a page is rendered at whatever width the viewport and zoom ask
+for and a highlight has to land on the text at every one of them.
+
+**Native layer.** `DjvuNative.kt` is the raw JNI surface (opaque `Long` handles)
+over `app/src/main/cpp/djvu_jni.cpp`. Structured results (words, links, outline)
+cross as one `ByteArray` with a documented big-endian encoding rather than as
+object arrays or JNI strings — the string call expects Java's modified UTF-8,
+which OCR output is under no obligation to be. **Every JNI call blocks while
+DjVuLibre decodes; none may run on the main thread.**
+
+`libdjvu` compiles at C++14 (its own `CMakeLists.txt`) because upstream still
+uses the `register` storage class, a hard error from C++17 on. The app's own
+C++ stays at C++17.
+
+**State.** `ReaderViewModel` owns the open document across configuration changes
+and closes the native handle in `onCleared`. All document access is serialised
+through a `documentLock` `Mutex` on `Dispatchers.IO` — a render in flight must
+not race the document being closed. It also owns the page bitmap `LruCache`
+(sized off the heap, evicted bitmaps deliberately *not* recycled), the page-text
+cache, link cache, search, selection and outline state.
+
+**Screens.** `MainActivity.kt` holds the reader itself (page list, zoom, pan,
+selection, links) and switches on `ReaderState` — Empty renders `LibraryScreen`,
+Loaded renders `DocumentReader`. Other screens are one file each: `SearchScreen`,
+`OutlineScreen`, `AboutScreen`, `GoToPageSheet`, `OpenLinkSheet`. Chrome widgets
+shared across them (`IconAction`, `PrimaryAction`, `StrokeIcon`, `Hairline`,
+the bars, the page slider) live in `ReaderChrome.kt`.
+
+**Documents are copied in.** Android hands out `content://` URIs; DjVuLibre opens
+by filesystem path. `DocumentImporter` copies into the cache on every open (the
+bytes behind a URI can change). `LibraryStore` persists recents as one JSON
+string in a Preferences DataStore, keyed by the persisted content URI.
+
+## Conventions that matter here
+
+- **Design system.** `DESIGN_PLAN.md` is the source of truth: a blueprint /
+  technical-drawing look, radius 0 everywhere, hairline borders instead of
+  filled surfaces, Fira Sans / Fira Sans Condensed bundled as OFL TTFs. Read
+  colours from `Industry` (the `IndustryPalette` composition local), not from
+  `MaterialTheme` — the Material scheme is filled in only for the few remaining
+  Material parts (sheets, spinner). Light and dark both exist and follow the
+  system; there is no in-app switch.
+- **Strings.** Every string the reader sees is in `res/values/strings.xml`, with
+  `values-ru` and `values-es` translations and `res/xml/locales_config.xml`
+  listing them. Labels the design sets in capitals are stored sentence-case and
+  uppercased at draw time via `upperStringResource` — Turkish and Greek casing
+  is not a decision to bake into a resource or hand to a translator.
+- **Comments explain why, not what.** The existing code documents the decision
+  behind a piece of code — why a cache is not recycled, why words are joined in
+  the JNI rather than by ddjvu, why the page gap is 2dp. Match that register.
+- The app logs nothing of its own; there is no `Log` tag to filter on. To trace
+  something, add a temporary one.
+
+## Other files
+
+- `TODO.md` — open work, known gaps, and environment notes. Keep it current;
+  the QA subagent files findings here.
+- `licenses/` — bundled font licences. DjVuLibre is GPLv2+, so the combined work
+  is GPL once distributed; the project has accepted that rather than isolating
+  the decoder. A top-level `LICENSE` is still outstanding.
+- `/reviews` is gitignored — design/QA review runs with their screenshots.

@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import android.app.Activity
 import android.content.Context
@@ -95,16 +95,16 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.djvureader.app.ui.theme.DjvuTheme
-import com.djvureader.app.ui.theme.Industry
-import com.djvureader.app.ui.theme.IndustryAccent
-import com.djvureader.app.ui.theme.IndustryBackground
-import com.djvureader.app.ui.theme.IndustryDivider
-import com.djvureader.app.ui.theme.IndustryNeutral200
-import com.djvureader.app.ui.theme.LightIndustry
-import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.ink
-import com.djvureader.app.ui.theme.onSurfaceAlpha
+import com.cartavu.app.ui.theme.CartaVuTheme
+import com.cartavu.app.ui.theme.Industry
+import com.cartavu.app.ui.theme.IndustryAccent
+import com.cartavu.app.ui.theme.IndustryBackground
+import com.cartavu.app.ui.theme.IndustryDivider
+import com.cartavu.app.ui.theme.IndustryNeutral200
+import com.cartavu.app.ui.theme.LightIndustry
+import com.cartavu.app.ui.theme.TabularNums
+import com.cartavu.app.ui.theme.ink
+import com.cartavu.app.ui.theme.onSurfaceAlpha
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -165,7 +165,7 @@ class MainActivity : ComponentActivity() {
         // A document may arrive from another app via ACTION_VIEW.
         val initialUri: Uri? = intent?.data
         setContent {
-            DjvuTheme {
+            CartaVuTheme {
                 // The clock and the navigation icons have to contrast with
                 // whatever the app is drawing behind them, so they follow the
                 // palette rather than being fixed dark.

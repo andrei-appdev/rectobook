@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import android.graphics.Bitmap
 
@@ -10,7 +10,7 @@ import android.graphics.Bitmap
  */
 internal object DjvuNative {
     init {
-        System.loadLibrary("djvureader")
+        System.loadLibrary("cartavu")
     }
 
     /** Version string of the linked DjVuLibre build. */

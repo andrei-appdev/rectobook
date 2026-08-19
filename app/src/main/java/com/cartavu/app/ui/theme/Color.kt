@@ -1,4 +1,4 @@
-package com.djvureader.app.ui.theme
+package com.cartavu.app.ui.theme
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable

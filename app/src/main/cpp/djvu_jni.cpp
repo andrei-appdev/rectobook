@@ -267,19 +267,19 @@ void collectOutline(miniexp_t entries, int depth, std::string &out) {
 extern "C" {
 
 JNIEXPORT jstring JNICALL
-Java_com_djvureader_app_DjvuNative_nativeVersion(JNIEnv *env, jobject) {
+Java_com_cartavu_app_DjvuNative_nativeVersion(JNIEnv *env, jobject) {
     return env->NewStringUTF(ddjvu_get_version_string());
 }
 
 JNIEXPORT jlong JNICALL
-Java_com_djvureader_app_DjvuNative_nativeOpenDocument(JNIEnv *env, jobject, jstring jpath) {
+Java_com_cartavu_app_DjvuNative_nativeOpenDocument(JNIEnv *env, jobject, jstring jpath) {
     const char *path = env->GetStringUTFChars(jpath, nullptr);
     if (!path) {
         return 0;
     }
 
     auto *doc = new Document();
-    doc->context = ddjvu_context_create("djvureader");
+    doc->context = ddjvu_context_create("cartavu");
     if (!doc->context) {
         env->ReleaseStringUTFChars(jpath, path);
         releaseDocument(doc);
@@ -307,12 +307,12 @@ Java_com_djvureader_app_DjvuNative_nativeOpenDocument(JNIEnv *env, jobject, jstr
 }
 
 JNIEXPORT void JNICALL
-Java_com_djvureader_app_DjvuNative_nativeCloseDocument(JNIEnv *, jobject, jlong handle) {
+Java_com_cartavu_app_DjvuNative_nativeCloseDocument(JNIEnv *, jobject, jlong handle) {
     releaseDocument(asDocument(handle));
 }
 
 JNIEXPORT jint JNICALL
-Java_com_djvureader_app_DjvuNative_nativeGetPageCount(JNIEnv *, jobject, jlong handle) {
+Java_com_cartavu_app_DjvuNative_nativeGetPageCount(JNIEnv *, jobject, jlong handle) {
     Document *doc = asDocument(handle);
     if (!doc || !doc->document) {
         return 0;
@@ -323,7 +323,7 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageCount(JNIEnv *, jobject, jlong h
 // Returns {width, height, dpi}, or null if the page info could not be read.
 // This queries page geometry without fully decoding the page.
 JNIEXPORT jintArray JNICALL
-Java_com_djvureader_app_DjvuNative_nativeGetPageInfo(JNIEnv *env, jobject, jlong handle,
+Java_com_cartavu_app_DjvuNative_nativeGetPageInfo(JNIEnv *env, jobject, jlong handle,
                                                     jint pageNumber) {
     Document *doc = asDocument(handle);
     if (!doc || !doc->document) {
@@ -370,7 +370,7 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageInfo(JNIEnv *env, jobject, jlong
 // depth, target length, target, title length, title - all integers
 // big-endian, all strings UTF-8. Empty when the document has no outline.
 JNIEXPORT jbyteArray JNICALL
-Java_com_djvureader_app_DjvuNative_nativeGetOutline(JNIEnv *env, jobject, jlong handle) {
+Java_com_cartavu_app_DjvuNative_nativeGetOutline(JNIEnv *env, jobject, jlong handle) {
     Document *doc = asDocument(handle);
     if (!doc || !doc->document) {
         return nullptr;
@@ -401,7 +401,7 @@ Java_com_djvureader_app_DjvuNative_nativeGetOutline(JNIEnv *env, jobject, jlong 
 }
 
 JNIEXPORT jbyteArray JNICALL
-Java_com_djvureader_app_DjvuNative_nativeGetPageLinks(JNIEnv *env, jobject, jlong handle,
+Java_com_cartavu_app_DjvuNative_nativeGetPageLinks(JNIEnv *env, jobject, jlong handle,
                                                      jint pageNumber) {
     Document *doc = asDocument(handle);
     if (!doc || !doc->document) {
@@ -463,7 +463,7 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageLinks(JNIEnv *env, jobject, jlon
 }
 
 JNIEXPORT jbyteArray JNICALL
-Java_com_djvureader_app_DjvuNative_nativeGetPageWords(JNIEnv *env, jobject, jlong handle,
+Java_com_cartavu_app_DjvuNative_nativeGetPageWords(JNIEnv *env, jobject, jlong handle,
                                                      jint pageNumber) {
     Document *doc = asDocument(handle);
     if (!doc || !doc->document) {
@@ -505,7 +505,7 @@ Java_com_djvureader_app_DjvuNative_nativeGetPageWords(JNIEnv *env, jobject, jlon
 // a (0,0) clip renders the whole page; a larger page size with a moving clip is
 // how zoomed/tiled rendering works.
 JNIEXPORT jboolean JNICALL
-Java_com_djvureader_app_DjvuNative_nativeRenderPage(JNIEnv *env, jobject, jlong handle,
+Java_com_cartavu_app_DjvuNative_nativeRenderPage(JNIEnv *env, jobject, jlong handle,
                                                    jint pageNumber, jobject bitmap,
                                                    jint pageWidth, jint pageHeight,
                                                    jint clipX, jint clipY) {

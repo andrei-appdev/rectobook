@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import android.content.Context
 import android.graphics.Bitmap

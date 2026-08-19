@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "com.djvureader.app"
+    namespace = "com.cartavu.app"
     compileSdk = 35
     ndkVersion = "27.3.13750724"
 
     defaultConfig {
-        applicationId = "com.djvureader.app"
+        applicationId = "com.cartavu.app"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

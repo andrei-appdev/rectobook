@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,12 +24,12 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.djvureader.app.ui.theme.IndustryAccent
-import com.djvureader.app.ui.theme.IndustryBackground
-import com.djvureader.app.ui.theme.IndustryDivider
-import com.djvureader.app.ui.theme.IndustryNeutral900
-import com.djvureader.app.ui.theme.SectionLabel
-import com.djvureader.app.ui.theme.onSurfaceAlpha
+import com.cartavu.app.ui.theme.IndustryAccent
+import com.cartavu.app.ui.theme.IndustryBackground
+import com.cartavu.app.ui.theme.IndustryDivider
+import com.cartavu.app.ui.theme.IndustryNeutral900
+import com.cartavu.app.ui.theme.SectionLabel
+import com.cartavu.app.ui.theme.onSurfaceAlpha
 
 /**
  * Asks before leaving the document for somewhere outside it.

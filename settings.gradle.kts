@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "DjvuReader"
+rootProject.name = "CartaVu"
 include(":app")

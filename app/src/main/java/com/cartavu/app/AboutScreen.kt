@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -16,8 +16,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import com.djvureader.app.ui.theme.IndustryBackground
-import com.djvureader.app.ui.theme.onSurfaceAlpha
+import com.cartavu.app.ui.theme.IndustryBackground
+import com.cartavu.app.ui.theme.onSurfaceAlpha
 
 /**
  * What the library's info mark opens: the app's name and version, and nothing

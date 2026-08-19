@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
@@ -38,14 +38,14 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.djvureader.app.ui.theme.IndustryAccent
-import com.djvureader.app.ui.theme.IndustryAccent700
-import com.djvureader.app.ui.theme.IndustryDivider
-import com.djvureader.app.ui.theme.LightIndustry
-import com.djvureader.app.ui.theme.SectionLabel
-import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.ink
-import com.djvureader.app.ui.theme.onSurfaceAlpha
+import com.cartavu.app.ui.theme.IndustryAccent
+import com.cartavu.app.ui.theme.IndustryAccent700
+import com.cartavu.app.ui.theme.IndustryDivider
+import com.cartavu.app.ui.theme.LightIndustry
+import com.cartavu.app.ui.theme.SectionLabel
+import com.cartavu.app.ui.theme.TabularNums
+import com.cartavu.app.ui.theme.ink
+import com.cartavu.app.ui.theme.onSurfaceAlpha
 
 /**
  * The library, styled after the design's first screen: wordmark, a single

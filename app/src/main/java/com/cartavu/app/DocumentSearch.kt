@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 /** One occurrence of the query, with enough of its line to read it in a list. */
 data class SearchHit(

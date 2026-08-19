@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -30,13 +30,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.djvureader.app.ui.theme.BodyFont
-import com.djvureader.app.ui.theme.IndustryAccent
-import com.djvureader.app.ui.theme.IndustryDivider
-import com.djvureader.app.ui.theme.IndustrySurface
-import com.djvureader.app.ui.theme.IndustryText
-import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.onSurfaceAlpha
+import com.cartavu.app.ui.theme.BodyFont
+import com.cartavu.app.ui.theme.IndustryAccent
+import com.cartavu.app.ui.theme.IndustryDivider
+import com.cartavu.app.ui.theme.IndustrySurface
+import com.cartavu.app.ui.theme.IndustryText
+import com.cartavu.app.ui.theme.TabularNums
+import com.cartavu.app.ui.theme.onSurfaceAlpha
 
 /**
  * The design's `.input`: a square, hairline-bordered field on the surface tone,

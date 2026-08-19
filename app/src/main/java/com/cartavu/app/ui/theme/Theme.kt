@@ -1,4 +1,4 @@
-package com.djvureader.app.ui.theme
+package com.cartavu.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,7 +61,7 @@ private val SquareShapes = Shapes(
  * be told again here.
  */
 @Composable
-fun DjvuTheme(
+fun CartaVuTheme(
     dark: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {

@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import android.app.Application
 import android.content.Intent

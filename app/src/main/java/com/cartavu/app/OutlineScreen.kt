@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -21,10 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.djvureader.app.ui.theme.IndustryAccent700
-import com.djvureader.app.ui.theme.IndustryBackground
-import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.onSurfaceAlpha
+import com.cartavu.app.ui.theme.IndustryAccent700
+import com.cartavu.app.ui.theme.IndustryBackground
+import com.cartavu.app.ui.theme.TabularNums
+import com.cartavu.app.ui.theme.onSurfaceAlpha
 
 /**
  * The document's own table of contents, as it was written into the file.

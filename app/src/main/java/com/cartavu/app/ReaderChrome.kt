@@ -1,4 +1,4 @@
-package com.djvureader.app
+package com.cartavu.app
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -50,13 +50,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import com.djvureader.app.ui.theme.HeadingFont
-import com.djvureader.app.ui.theme.IndustryAccent
-import com.djvureader.app.ui.theme.IndustryBackground
-import com.djvureader.app.ui.theme.IndustryDivider
-import com.djvureader.app.ui.theme.IndustryText
-import com.djvureader.app.ui.theme.TabularNums
-import com.djvureader.app.ui.theme.onSurfaceAlpha
+import com.cartavu.app.ui.theme.HeadingFont
+import com.cartavu.app.ui.theme.IndustryAccent
+import com.cartavu.app.ui.theme.IndustryBackground
+import com.cartavu.app.ui.theme.IndustryDivider
+import com.cartavu.app.ui.theme.IndustryText
+import com.cartavu.app.ui.theme.TabularNums
+import com.cartavu.app.ui.theme.onSurfaceAlpha
 import kotlin.math.roundToInt
 
 /**
