@@ -13,13 +13,23 @@ import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
+import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -227,6 +237,38 @@ internal fun PrimaryAction(
 }
 
 /**
+ * Keeps content clear of the system bars.
+ *
+ * The window itself reserves nothing: the page fills it, and the system bars
+ * and the reader's own bars are drawn over the page rather than beside it.
+ * Everything that is not a page - the library, the panels, the bars' own
+ * controls - still has to stay out from under them.
+ *
+ * All three read the insets *ignoring visibility*, so the space a bar occupies
+ * stays reserved while it is hidden. A screen that laid itself out into that
+ * space and back again as the chrome came and went is the resize this whole
+ * arrangement exists to avoid: the page behind it would be re-rendered at a new
+ * width for the sake of a strip with nothing in it.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun Modifier.clearOfSystemBars(): Modifier =
+    windowInsetsPadding(WindowInsets.systemBarsIgnoringVisibility)
+
+/** Clear of the navigation bar alone, on whichever edge it is on. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun Modifier.clearOfNavigationBar(
+    sides: WindowInsetsSides = WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom,
+): Modifier = windowInsetsPadding(WindowInsets.navigationBarsIgnoringVisibility.only(sides))
+
+/** Clear of the status bar alone. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun Modifier.clearOfStatusBar(): Modifier =
+    windowInsetsPadding(WindowInsets.statusBarsIgnoringVisibility)
+
+/**
  * How far off screen a hidden bar sits, as a fraction of its own height. The
  * design's `translateY(±102%)` clears the bar plus its hairline border.
  */
@@ -247,6 +289,7 @@ private const val HIDDEN_SHIFT = 1.02f
  * [hidden] runs 0..1 and is animated by the caller, so the bar slides rather
  * than appearing.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReaderTopBar(
     title: String,
@@ -266,8 +309,14 @@ fun ReaderTopBar(
             .background(IndustryBackground.copy(alpha = 0.94f)),
     ) {
         Row(
+            // The bar reaches the top edge so that the page can too - in
+            // landscape, where the status bar goes with the chrome, the page
+            // is the whole height of the screen and the clock sits on this
+            // bar's background while the bar is there.
             modifier = Modifier
                 .fillMaxWidth()
+                .clearOfStatusBar()
+                .clearOfNavigationBar(WindowInsetsSides.Horizontal)
                 .padding(horizontal = 8.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -291,6 +340,7 @@ fun ReaderTopBar(
  * Reader bottom bar: the page indicator, a slider across the document, and the
  * zoom segment.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReaderBottomBar(
     currentPage: Int,
@@ -306,6 +356,9 @@ fun ReaderBottomBar(
     onZoomReset: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val navigationStrip = WindowInsets.navigationBarsIgnoringVisibility
+        .asPaddingValues()
+        .calculateBottomPadding()
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -314,8 +367,12 @@ fun ReaderBottomBar(
     ) {
         Hairline()
         Row(
+            // The bar reaches the bottom edge so that the page can too - its
+            // controls sit above the navigation bar's strip, its background
+            // fills it.
             modifier = Modifier
                 .fillMaxWidth()
+                .clearOfNavigationBar(WindowInsetsSides.Horizontal)
                 .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -385,6 +442,19 @@ fun ReaderBottomBar(
                 )
             }
         }
+
+        // The strip the navigation buttons stand on, painted solid. The bar
+        // itself is translucent so the page can be seen running under it, but
+        // a button read against a page it half shows through is a button on
+        // nothing; the buttons get the app's own colour behind them. In
+        // landscape the bar is on a side rather than the bottom, this is
+        // nothing high, and they stand on the page instead.
+        Spacer(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(navigationStrip)
+                .background(IndustryBackground),
+        )
     }
 }
 

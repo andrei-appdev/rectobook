@@ -4,7 +4,9 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -30,17 +32,21 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -80,6 +86,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -162,6 +169,22 @@ class MainActivity : ComponentActivity() {
         // the bars the same way rather than resizing the window underneath us.
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
+        // Nothing of the system's own goes behind the navigation buttons: the
+        // app is already drawing there - its background on the screens that
+        // are not a page, the reader's bottom bar in portrait, the page itself
+        // in landscape - and a scrim for contrast is a colour from outside the
+        // palette laid over all three.
+        //
+        // Both of these are asks rather than settings from API 35 on, where
+        // the platform draws the button bar itself and ignores them. It does
+        // leave the bar alone where it runs down a side in landscape, which is
+        // where a scrim would have covered the page.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced = false
+        }
+        @Suppress("DEPRECATION")
+        window.navigationBarColor = android.graphics.Color.TRANSPARENT
+
         // A document may arrive from another app via ACTION_VIEW.
         val initialUri: Uri? = intent?.data
         setContent {
@@ -177,9 +200,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    // Keep the bar and page list clear of the status and
-                    // navigation bars.
-                    Box(modifier = Modifier.fillMaxSize().systemBarsPadding()) {
+                    // The window reserves nothing: the page has all of it, and
+                    // the bars - the system's and the reader's own - are drawn
+                    // over the page rather than beside it. What has to stay
+                    // clear of them says so for itself.
+                    Box(modifier = Modifier.fillMaxSize()) {
                         ReaderScreen(initialUri = initialUri)
                     }
                 }
@@ -260,6 +285,7 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DocumentReader(
     state: ReaderState.Loaded,
@@ -277,6 +303,22 @@ private fun DocumentReader(
     var showOutline by remember { mutableStateOf(false) }
     val outlineListState = rememberLazyListState()
     val outline by viewModel.outline.collectAsState()
+
+    // How much of the screen the system bars stand on. Read ignoring whether
+    // they are showing, so the reader lays out the same way with a bar hidden
+    // and the page behind it does not have to be re-rendered.
+    val navigationStrip = WindowInsets.navigationBarsIgnoringVisibility
+        .asPaddingValues()
+        .calculateBottomPadding()
+    val statusStrip = WindowInsets.statusBarsIgnoringVisibility
+        .asPaddingValues()
+        .calculateTopPadding()
+
+    // In portrait the status bar stays whatever the chrome does, so the page
+    // starts below it. In landscape it goes with the chrome, and the page has
+    // the whole height of the screen with the clock over it while it is there.
+    val portrait =
+        LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE
 
     // The design's chrome is transient: it starts visible and a tap on the page
     // takes it away, so a document can be read edge to edge.
@@ -555,6 +597,7 @@ private fun DocumentReader(
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .then(if (portrait) Modifier.clearOfStatusBar() else Modifier)
                 // The design lays the pages on a tone darker than the app
                 // background, so a white page reads as paper on a desk.
                 .background(IndustryNeutral200)
@@ -633,8 +676,13 @@ private fun DocumentReader(
                             .fillMaxHeight(),
                         // Pages run under the bars, which are translucent, so
                         // the list reserves their height rather than being
-                        // inset by it.
-                        contentPadding = PaddingValues(top = 60.dp, bottom = 66.dp),
+                        // inset by it. Each bar stands on a system bar's strip
+                        // wherever the page runs under that too, so the first
+                        // and last page clear those as well.
+                        contentPadding = PaddingValues(
+                            top = 60.dp + if (portrait) 0.dp else statusStrip,
+                            bottom = 66.dp + navigationStrip,
+                        ),
                         verticalArrangement = Arrangement.spacedBy(PAGE_GAP),
                     ) {
                         items(count = state.pageCount, key = { it }) { index ->
@@ -1113,7 +1161,13 @@ private fun selectionEnds(rects: List<PageRect>, size: IntSize): List<Offset>? {
 }
 
 /**
- * Shows or hides the status and navigation bars.
+ * Shows or hides the system bars along with the reader's own chrome.
+ *
+ * The navigation bar goes in both orientations - it is buttons the reader is
+ * not using while reading. The status bar only goes in landscape, where the
+ * page is short of height and the clock costs a visible slice of it; in
+ * portrait it stays, because there the page is short of width instead and
+ * hiding a bar above it buys nothing.
  *
  * `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` keeps the bars reachable while they
  * are hidden: a swipe from an edge brings them back for a moment, so the clock
@@ -1128,13 +1182,20 @@ private fun SystemBars(visible: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
     val window = view.context.findActivity()?.window ?: return
+    val landscape =
+        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    LaunchedEffect(visible) {
+    LaunchedEffect(visible, landscape) {
         WindowCompat.getInsetsController(window, view).apply {
             systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (visible) show(WindowInsetsCompat.Type.systemBars())
-            else hide(WindowInsetsCompat.Type.systemBars())
+            if (visible) {
+                show(WindowInsetsCompat.Type.systemBars())
+            } else {
+                hide(WindowInsetsCompat.Type.navigationBars())
+                if (landscape) hide(WindowInsetsCompat.Type.statusBars())
+                else show(WindowInsetsCompat.Type.statusBars())
+            }
         }
     }
 
@@ -1207,5 +1268,8 @@ private fun Modifier.pinchToZoom(
 
 @Composable
 private fun Centered(content: @Composable () -> Unit) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { content() }
+    Box(
+        modifier = Modifier.fillMaxSize().clearOfSystemBars(),
+        contentAlignment = Alignment.Center,
+    ) { content() }
 }

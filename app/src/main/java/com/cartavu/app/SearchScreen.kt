@@ -5,12 +5,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.navigationBarsIgnoringVisibility
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.text.KeyboardActions
@@ -52,6 +57,7 @@ import com.cartavu.app.ui.theme.onSurfaceAlpha
  * matches means going down the list one at a time, and a list that returned to
  * the top each time would make that impossible.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
     query: String,
@@ -65,7 +71,13 @@ fun SearchScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(IndustryBackground)
-            .imePadding(),
+            .clearOfStatusBar()
+            // The keyboard rises from the same edge the navigation bar sits
+            // on, so the screen stands clear of whichever is taller rather
+            // than of both in turn.
+            .windowInsetsPadding(
+                WindowInsets.ime.union(WindowInsets.navigationBarsIgnoringVisibility),
+            ),
     ) {
         Row(
             modifier = Modifier

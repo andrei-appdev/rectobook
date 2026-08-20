@@ -65,11 +65,13 @@ fun LibraryScreen(
     onAbout: () -> Unit,
     onOpenRecent: (RecentDocument) -> Unit,
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 28.dp),
-    ) {
-        item {
+    Column(modifier = Modifier.fillMaxSize().clearOfSystemBars()) {
+        // Everything above the cards stays put while they scroll under it. The
+        // wordmark and the action are what the screen is for, and a long shelf
+        // that pushed the way to open a document off the top would hide it
+        // behind a scroll back up; the section row goes with them because it
+        // names the column the cards' page markers sit in.
+        Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 20.dp)) {
             // The wordmark and the way out to the about screen. Neither the
             // version nor a count of what has been read belongs here: the
             // screen's job is to open a document.
@@ -84,21 +86,17 @@ fun LibraryScreen(
                 )
                 IconAction(InfoIcon, stringResource(R.string.library_about), onAbout, size = 18.dp)
             }
-        }
 
-        item {
             PrimaryAction(
                 icon = FolderIcon,
                 label = upperStringResource(R.string.library_open_file),
                 onClick = onPick,
                 modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
             )
-        }
 
-        if (recents.isNotEmpty()) {
-            item {
+            if (recents.isNotEmpty()) {
                 Row(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
@@ -114,6 +112,22 @@ fun LibraryScreen(
                     )
                 }
             }
+        }
+
+        // The rule the cards pass under. Without it a card scrolled to the top
+        // edge is simply sliced through, which reads as a drawing error rather
+        // than as the end of the list's window. Full width, like every other
+        // rule in the design.
+        if (recents.isNotEmpty()) Hairline()
+
+        // Full width rather than inset, so the overscroll glow meets the edges
+        // of the screen; the content is what carries the 18dp margin. The first
+        // card is set off the rule by the same 13dp that separates the cards
+        // from each other.
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 18.dp, end = 18.dp, top = 13.dp, bottom = 28.dp),
+        ) {
             items(count = recents.size, key = { recents[it].key }) { index ->
                 val document = recents[index]
                 RecentCard(

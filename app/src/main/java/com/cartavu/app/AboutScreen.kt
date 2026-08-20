@@ -31,7 +31,8 @@ fun AboutScreen(onBack: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(IndustryBackground),
+            .background(IndustryBackground)
+            .clearOfSystemBars(),
     ) {
         Row(
             modifier = Modifier
