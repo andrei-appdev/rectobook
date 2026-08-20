@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.nio.charset.Charset
 
 /**
  * An open DjVu document, decoded by the vendored DjVuLibre.
@@ -142,7 +143,7 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
             val top = buffer.int
             val length = buffer.int
             if (length < 0 || length > buffer.remaining()) break
-            val target = ByteArray(length).also(buffer::get).toString(Charsets.UTF_8)
+            val target = ByteArray(length).also(buffer::get).decodeText()
 
             val bounds = PageRect(
                 left = left / frameWidth,
@@ -272,7 +273,7 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
             val top = buffer.int
             val length = buffer.int
             if (length < 0 || length > buffer.remaining()) break
-            val text = ByteArray(length).also(buffer::get).toString(Charsets.UTF_8)
+            val text = ByteArray(length).also(buffer::get).decodeText()
             words += Word(text = text, left = left, bottom = bottom, right = right, top = top)
         }
         return words
@@ -316,12 +317,46 @@ class DjvuDocument private constructor(private var handle: Long) : PagedDocument
     }
 
     companion object {
-        /** A length-prefixed UTF-8 string, or null if the buffer is short. */
+        /**
+         * What a document's bytes are read as when they turn out not to be
+         * UTF-8. Not one of the charsets a JVM is required to provide, so it
+         * falls back to the Latin-1 it is a superset of.
+         */
+        private val Legacy: Charset =
+            runCatching { Charset.forName("windows-1252") }.getOrDefault(Charsets.ISO_8859_1)
+
+        private const val REPLACEMENT = '�'
+
+        /**
+         * Bytes from the document, as text.
+         *
+         * DjVu says its strings are UTF-8 and most files mean it, but the
+         * bookmarks and hidden text of older scans carry whatever eight-bit
+         * encoding the tool that wrote them used, and there is no declaration
+         * anywhere to say which. Read as UTF-8, every byte above ASCII in one
+         * of those becomes U+FFFD - a scanned maths book listing every one of
+         * its sections as "?6. Analytic Manifolds" in the contents, beside a
+         * page that plainly reads "§6".
+         *
+         * Anything UTF-8 could not read is taken as [Legacy] instead. Where the
+         * file's encoding was not a Western one that gives mojibake rather than
+         * question marks - no more correct, but it is at least still the
+         * reader's own alphabet to guess at rather than a row of diamonds.
+         */
+        private fun ByteArray.decodeText(): String {
+            val text = toString(Charsets.UTF_8)
+            // The replacement character is what the decoder substitutes for
+            // bytes it could not read. A document that means to contain one is
+            // not a thing that happens.
+            return if (REPLACEMENT !in text) text else toString(Legacy)
+        }
+
+        /** A length-prefixed string, or null if the buffer is short. */
         private fun ByteBuffer.readString(): String? {
             if (remaining() < Int.SIZE_BYTES) return null
             val length = int
             if (length < 0 || length > remaining()) return null
-            return ByteArray(length).also(::get).toString(Charsets.UTF_8)
+            return ByteArray(length).also(::get).decodeText()
         }
 
         /** Four box edges and a length, per word. */
