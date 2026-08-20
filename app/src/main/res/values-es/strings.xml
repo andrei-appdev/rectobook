@@ -10,7 +10,6 @@
     <string name="library_about">Acerca de la aplicación</string>
     <string name="library_open_file">Abrir archivo</string>
     <string name="library_recent">Recientes</string>
-    <string name="library_last_opened">Última apertura</string>
     <string name="library_page_marker">P.%1$d</string>
     <string name="library_not_measured">Sin datos</string>
     <!--

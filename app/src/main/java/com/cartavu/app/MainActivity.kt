@@ -53,7 +53,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -109,7 +108,6 @@ import com.cartavu.app.ui.theme.IndustryBackground
 import com.cartavu.app.ui.theme.IndustryDivider
 import com.cartavu.app.ui.theme.IndustryNeutral200
 import com.cartavu.app.ui.theme.LightIndustry
-import com.cartavu.app.ui.theme.TabularNums
 import com.cartavu.app.ui.theme.ink
 import com.cartavu.app.ui.theme.onSurfaceAlpha
 import kotlin.math.roundToInt
@@ -139,6 +137,9 @@ private val PAGE_GAP = 2.dp
 /** The design's `transition: transform .22s cubic-bezier(.3,.7,.2,1)`. */
 private const val CHROME_SLIDE_MS = 220
 private val ChromeEasing = CubicBezierEasing(0.3f, 0.7f, 0.2f, 1f)
+
+/** How long a page decodes for before it is worth telling the reader about. */
+private const val PAGE_WAIT_MS = 200L
 
 /**
  * The caliper marking each end of a selection - the same square mark the page
@@ -251,7 +252,7 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
             }
         }
 
-        is ReaderState.Loading -> Centered { CircularProgressIndicator() }
+        is ReaderState.Loading -> Centered { WaitRing(onSurfaceAlpha(0.45f)) }
 
         is ReaderState.Error -> Centered {
             // This screen has no arrow of its own to mirror, and without a
@@ -922,6 +923,16 @@ private fun PageView(
         if (rendered != null) bitmap = rendered
     }
 
+    // Whether this page has been empty long enough to be worth marking.
+    var slowToDecode by remember(pageNumber) { mutableStateOf(false) }
+    LaunchedEffect(pageNumber, bitmap == null) {
+        slowToDecode = false
+        if (bitmap == null) {
+            delay(PAGE_WAIT_MS)
+            slowToDecode = true
+        }
+    }
+
     // A page's links never change while the document is open, so this is asked
     // once per page and answered from the view model's cache thereafter.
     val links by produceState(emptyList<PageLink>(), pageNumber) {
@@ -1006,14 +1017,12 @@ private fun PageView(
     ) {
         val current = bitmap
         if (current == null) {
-            Text(
-                text = stringResource(R.string.reader_page_number, pageNumber + 1),
-                style = MaterialTheme.typography.labelMedium
-                    .copy(fontFeatureSettings = TabularNums),
-                // On the page's own white, so it takes paper ink rather than
-                // the app's, which after dark would be white on white.
-                color = LightIndustry.ink(0.45f),
-            )
+            // Only once the wait is worth marking. Most pages come back within
+            // a frame or two, and a ring that appears and goes in that time
+            // reads as a flicker rather than as work - so the page stays blank
+            // paper until it is plainly slow, and then says so the same way
+            // the document itself did while it opened.
+            if (slowToDecode) WaitRing(LightIndustry.ink(0.45f))
         } else {
             Image(
                 bitmap = current.asImageBitmap(),

@@ -95,22 +95,11 @@ fun LibraryScreen(
             )
 
             if (recents.isNotEmpty()) {
-                Row(
+                Text(
+                    text = upperStringResource(R.string.library_recent),
+                    style = SectionLabel,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Text(
-                        text = upperStringResource(R.string.library_recent),
-                        style = SectionLabel,
-                        modifier = Modifier.alignByBaseline(),
-                    )
-                    Text(
-                        text = stringResource(R.string.library_last_opened),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = onSurfaceAlpha(0.45f),
-                        modifier = Modifier.alignByBaseline(),
-                    )
-                }
+                )
             }
         }
 

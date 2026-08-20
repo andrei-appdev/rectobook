@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -234,6 +235,32 @@ internal fun PrimaryAction(
             color = IndustryBackground,
         )
     }
+}
+
+/** The one size the app waits at. */
+private val WaitRingSize = 22.dp
+private val WaitRingStroke = 2.dp
+
+/**
+ * The app's one way of saying *working*.
+ *
+ * Small and grey rather than the platform's full-size accent ring: nothing
+ * here can be measured - neither opening a document nor decoding a page
+ * reports progress - so this marks that something is happening rather than
+ * offering something to watch. It is the same ring in the same place wherever
+ * the app waits.
+ *
+ * [color] is the ink of whatever it is drawn on - the app's own on the loading
+ * screen, the page's paper ink in the reader, which is fixed light because a
+ * page is white in both palettes.
+ */
+@Composable
+fun WaitRing(color: Color, modifier: Modifier = Modifier) {
+    CircularProgressIndicator(
+        modifier = modifier.size(WaitRingSize),
+        color = color,
+        strokeWidth = WaitRingStroke,
+    )
 }
 
 /**
