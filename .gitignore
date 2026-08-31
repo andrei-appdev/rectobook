@@ -17,3 +17,8 @@
 # written against them. Regenerated whenever a review runs, and heavy enough
 # in PNGs that the history is better off without them.
 /reviews
+
+# The documents opened while testing on the emulator. Fixtures rather than
+# sources, and heavy enough in scans that the history is better off without
+# them.
+/docs
