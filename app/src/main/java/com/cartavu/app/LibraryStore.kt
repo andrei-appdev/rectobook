@@ -104,6 +104,27 @@ class LibraryStore(private val context: Context) {
         }
     }
 
+    /**
+     * What pages are toned to, for the same reason contrast is kept here: it is
+     * a way of reading rather than a property of one document.
+     *
+     * Stored by name, and an unreadable one falls back to [PageColorMode.NORMAL]
+     * rather than taking the read down - a mode this build no longer has is not
+     * a reason to open the app without a setting.
+     */
+    val colorMode: Flow<PageColorMode> =
+        context.libraryDataStore.data.map { preferences ->
+            runCatching {
+                PageColorMode.valueOf(preferences[COLOR_MODE_KEY] ?: "")
+            }.getOrDefault(PageColorMode.NORMAL)
+        }
+
+    suspend fun saveColorMode(mode: PageColorMode) {
+        context.libraryDataStore.edit { preferences ->
+            preferences[COLOR_MODE_KEY] = mode.name
+        }
+    }
+
     private fun decode(raw: String?): List<RecentDocument> {
         if (raw.isNullOrBlank()) return emptyList()
         return runCatching {
@@ -150,6 +171,7 @@ class LibraryStore(private val context: Context) {
     companion object {
         private val RECENTS_KEY = stringPreferencesKey("recents")
         private val CONTRAST_KEY = floatPreferencesKey("contrast")
+        private val COLOR_MODE_KEY = stringPreferencesKey("color_mode")
         private const val MAX_RECENTS = 20
     }
 }

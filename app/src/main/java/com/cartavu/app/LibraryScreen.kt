@@ -62,7 +62,7 @@ fun LibraryScreen(
     thumbnail: (RecentDocument) -> Bitmap?,
     onRequestThumbnail: (RecentDocument, Int, Int) -> Unit,
     onPick: () -> Unit,
-    onAbout: () -> Unit,
+    onSettings: () -> Unit,
     onOpenRecent: (RecentDocument) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxSize().clearOfSystemBars()) {
@@ -72,9 +72,9 @@ fun LibraryScreen(
         // behind a scroll back up; the section row goes with them because it
         // names the column the cards' page markers sit in.
         Column(modifier = Modifier.padding(start = 18.dp, end = 18.dp, top = 20.dp)) {
-            // The wordmark and the way out to the about screen. Neither the
-            // version nor a count of what has been read belongs here: the
-            // screen's job is to open a document.
+            // The wordmark and the way out to the settings. Neither the version
+            // nor a count of what has been read belongs here: the screen's job
+            // is to open a document.
             Row(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -84,7 +84,7 @@ fun LibraryScreen(
                     text = upperStringResource(R.string.library_title),
                     style = MaterialTheme.typography.headlineLarge,
                 )
-                IconAction(InfoIcon, stringResource(R.string.library_about), onAbout, size = 18.dp)
+                IconAction(MenuIcon, stringResource(R.string.library_settings), onSettings)
             }
 
             PrimaryAction(
@@ -205,8 +205,8 @@ private fun RecentCard(
 }
 
 /** The design's page slot: a 62 x 78 sheet, bordered, on white. */
-private val ThumbnailWidth = 62.dp
-private val ThumbnailHeight = 78.dp
+internal val ThumbnailWidth = 62.dp
+internal val ThumbnailHeight = 78.dp
 
 /**
  * The document's own first page, in the slot the design fills with a drawn
@@ -239,7 +239,9 @@ private fun PageThumbnail(
         contentAlignment = Alignment.Center,
     ) {
         if (thumbnail == null) {
-            PageGlyph()
+            // Paper ink, not the app's. This sheet is white in both palettes,
+            // so it cannot follow a theme that turns the ink pale.
+            PageGlyph(LightIndustry.ink(0.6f), LightIndustry.ink(0.32f))
         } else {
             Image(
                 bitmap = thumbnail.asImageBitmap(),
@@ -258,18 +260,21 @@ private fun PageThumbnail(
  * Both blocks are `repeating-linear-gradient`s in the design, and the sheet
  * clips them (`overflow: hidden`), so the body is cut off part-way rather than
  * ending on a whole line.
+ *
+ * The two inks are the caller's, because the settings screen draws this same
+ * sheet in whatever tone is being set rather than in the library's fixed one,
+ * and [scale] because it draws it larger: the geometry is written for the
+ * [ThumbnailWidth] slot, and a bigger sheet wants a bigger hand rather than the
+ * same rules spread thinner over it.
  */
 @Composable
-private fun PageGlyph() {
-    // Paper ink, not the app's. This is drawn on a white sheet in both
-    // palettes, so it cannot follow a theme that turns the ink pale.
-    val headingInk = LightIndustry.ink(0.6f)
-    val bodyInk = LightIndustry.ink(0.32f)
-
+internal fun PageGlyph(headingInk: Color, bodyInk: Color, scale: Float = 1f) {
     Canvas(modifier = Modifier.fillMaxSize()) {
+        fun unit(dp: Float) = dp.dp.toPx() * scale
+
         val border = 1.dp.toPx()
-        val padX = border + 5.dp.toPx()
-        val padY = border + 6.dp.toPx()
+        val padX = border + unit(5f)
+        val padY = border + unit(6f)
         val innerWidth = size.width - padX * 2
 
         clipRect(padX, padY, size.width - padX, size.height - padY) {
@@ -277,20 +282,20 @@ private fun PageGlyph() {
             stripes(
                 x = padX,
                 top = padY,
-                height = 7.dp.toPx(),
+                height = unit(7f),
                 width = innerWidth,
-                ink = 3.dp.toPx(),
-                period = 6.dp.toPx(),
+                ink = unit(3f),
+                period = unit(6f),
                 color = headingInk,
             )
             // Body: a 1dp hairline every 4dp, over a 56dp block the sheet clips.
             stripes(
                 x = padX,
-                top = padY + 13.dp.toPx(),
-                height = 56.dp.toPx(),
+                top = padY + unit(13f),
+                height = unit(56f),
                 width = innerWidth,
-                ink = 1.dp.toPx(),
-                period = 4.dp.toPx(),
+                ink = unit(1f).coerceAtLeast(1.dp.toPx()),
+                period = unit(4f),
                 color = bodyInk,
             )
         }

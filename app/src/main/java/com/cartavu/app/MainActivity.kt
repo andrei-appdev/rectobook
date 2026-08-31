@@ -76,10 +76,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -108,12 +105,9 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cartavu.app.ui.theme.CartaVuTheme
 import com.cartavu.app.ui.theme.Industry
-import com.cartavu.app.ui.theme.IndustryAccent
 import com.cartavu.app.ui.theme.IndustryBackground
 import com.cartavu.app.ui.theme.IndustryDivider
 import com.cartavu.app.ui.theme.IndustryNeutral200
-import com.cartavu.app.ui.theme.LightIndustry
-import com.cartavu.app.ui.theme.ink
 import com.cartavu.app.ui.theme.onSurfaceAlpha
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
@@ -264,9 +258,12 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
     when (val current = state) {
         is ReaderState.Empty -> {
             val recents by viewModel.recents.collectAsState()
-            // Kept here rather than inside the library so it survives that
+            val contrast by viewModel.contrast.collectAsState()
+            val colorMode by viewModel.colorMode.collectAsState()
+            // Kept here rather than inside the library so they survive that
             // screen's own scrolling and recomposition, and so back can be
-            // wired to it.
+            // wired to them.
+            var showSettings by rememberSaveable { mutableStateOf(false) }
             var showAbout by rememberSaveable { mutableStateOf(false) }
 
             LibraryScreen(
@@ -274,9 +271,24 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
                 thumbnail = viewModel::thumbnail,
                 onRequestThumbnail = viewModel::requestThumbnail,
                 onPick = openDocument,
-                onAbout = { showAbout = true },
+                onSettings = { showSettings = true },
                 onOpenRecent = viewModel::openRecent,
             )
+
+            // Each screen is drawn over the one it was opened from, and closes
+            // back onto it: About sits on the settings it was reached through,
+            // which is still there behind it.
+            if (showSettings) {
+                BackHandler { showSettings = false }
+                SettingsScreen(
+                    mode = colorMode,
+                    contrast = contrast,
+                    onModeChange = viewModel::setColorMode,
+                    onContrastChange = viewModel::setContrast,
+                    onAbout = { showAbout = true },
+                    onBack = { showSettings = false },
+                )
+            }
 
             if (showAbout) {
                 BackHandler { showAbout = false }
@@ -328,11 +340,11 @@ private fun DocumentReader(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var showGoToSheet by remember { mutableStateOf(false) }
-    var showContrastSheet by remember { mutableStateOf(false) }
     val contrast by viewModel.contrast.collectAsState()
-    // One filter for the whole document rather than one per page: it depends
-    // on nothing but the setting, and every page is drawn through it.
-    val pageFilter = remember(contrast) { pageContrastFilter(contrast) }
+    val colorMode by viewModel.colorMode.collectAsState()
+    // One tone for the whole document rather than one per page: it depends on
+    // nothing but the settings, and every page is drawn in it.
+    val tone = remember(colorMode, contrast) { PageTone(colorMode, contrast) }
     var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val searchResults by viewModel.search.collectAsState()
@@ -632,8 +644,10 @@ private fun DocumentReader(
                 .fillMaxSize()
                 .then(if (portrait) Modifier.clearOfStatusBar() else Modifier)
                 // The design lays the pages on a tone darker than the app
-                // background, so a white page reads as paper on a desk.
-                .background(IndustryNeutral200)
+                // background, so a white page reads as paper on a desk. A toned
+                // page brings its own desk: a black sheet on a light grey one
+                // is not a sheet laid on anything.
+                .background(tone.desk ?: IndustryNeutral200)
                 .onSizeChanged { viewport = it }
                 // The gesture sits outside the scrolling box so its centroid
                 // arrives in viewport coordinates rather than content ones.
@@ -727,7 +741,7 @@ private fun DocumentReader(
                             PageView(
                                 pageNumber = index,
                                 baseWidth = baseWidth,
-                                pageFilter = pageFilter,
+                                tone = tone,
                                 aspectRatio = aspectRatio,
                                 // Changes when the search does, which is what
                                 // sends a page to look up its marks again.
@@ -766,10 +780,6 @@ private fun DocumentReader(
             onSearch = {
                 viewModel.clearSelection()
                 showSearch = true
-            },
-            onContrast = {
-                viewModel.clearSelection()
-                showContrastSheet = true
             },
             onContents = if (outline.isEmpty()) {
                 null
@@ -859,14 +869,6 @@ private fun DocumentReader(
                     )
                 }
             },
-        )
-    }
-
-    if (showContrastSheet) {
-        ContrastSheet(
-            contrast = contrast,
-            onContrastChange = viewModel::setContrast,
-            onDismiss = { showContrastSheet = false },
         )
     }
 
@@ -999,7 +1001,7 @@ private fun PageView(
     pageNumber: Int,
     baseWidth: Int,
     aspectRatio: Float,
-    pageFilter: ColorFilter?,
+    tone: PageTone,
     highlightKey: String,
     selection: TextSelection?,
     onCopy: () -> Unit,
@@ -1009,9 +1011,10 @@ private fun PageView(
     val haptics = LocalHapticFeedback.current
     var pageSize by remember { mutableStateOf(IntSize.Zero) }
 
-    // The marks a page carries, all shades of the one accent. Read here
-    // because a draw lambda is not a composable scope.
-    val accent = IndustryAccent
+    // The marks a page carries, all shades of the one accent - the tone's,
+    // because an accent picked to read on white paper does not read on black.
+    // Read out here because a draw lambda is not a composable scope.
+    val accent = tone.markAccent
     val linkRuleColor = accent.copy(alpha = 0.55f)
     val highlightWash = accent.copy(alpha = 0.32f)
     val selectionWash = accent.copy(alpha = 0.30f)
@@ -1150,9 +1153,13 @@ private fun PageView(
             // gap it only smears into the rule between pages. The hairline edge
             // does the separating, so a scan that is white to its margin still
             // ends visibly.
-            .background(Color.White)
-            // The paper's own edge, so paper ink again rather than the app's.
-            .border(1.dp, LightIndustry.ink(0.14f)),
+            //
+            // The paper is white unless the tone has made it something else,
+            // in which case a white ground here would show as a halo wherever
+            // the bitmap does not reach.
+            .background(tone.paper)
+            // The paper's own edge, so the page's ink rather than the app's.
+            .border(1.dp, tone.ink.copy(alpha = 0.14f)),
         contentAlignment = Alignment.Center,
     ) {
         val current = bitmap
@@ -1162,14 +1169,14 @@ private fun PageView(
             // reads as a flicker rather than as work - so the page stays blank
             // paper until it is plainly slow, and then says so the same way
             // the document itself did while it opened.
-            if (slowToDecode) WaitRing(LightIndustry.ink(0.45f))
+            if (slowToDecode) WaitRing(tone.ink.copy(alpha = 0.45f))
         } else {
             Image(
                 bitmap = current.asImageBitmap(),
                 contentDescription = stringResource(R.string.reader_page_description, pageNumber + 1),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
-                colorFilter = pageFilter,
+                colorFilter = tone.filter,
             )
         }
 
@@ -1192,7 +1199,7 @@ private fun PageView(
                         (detail.request.width * scale).roundToInt(),
                         (detail.request.height * scale).roundToInt(),
                     ),
-                    colorFilter = pageFilter,
+                    colorFilter = tone.filter,
                 )
             }
         }

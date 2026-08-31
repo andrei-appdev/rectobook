@@ -7,7 +7,7 @@
     -->
 
     <!-- Library -->
-    <string name="library_about">О приложении</string>
+    <string name="library_settings">Настройки</string>
     <string name="library_open_file">Открыть файл</string>
     <string name="library_recent">Недавние</string>
     <string name="library_page_marker">С.%1$d</string>
@@ -24,6 +24,17 @@
         <item quantity="other">%1$d стр.</item>
     </plurals>
 
+    <!-- Settings -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_close">Закрыть настройки</string>
+    <string name="settings_color_mode">Цветовой режим</string>
+    <string name="color_mode_normal">Обычный</string>
+    <string name="color_mode_inverted">Инверсия</string>
+    <string name="color_mode_sepia">Сепия</string>
+    <string name="settings_contrast">Контраст</string>
+    <string name="contrast_as_scanned">Как в скане</string>
+    <string name="settings_about">О приложении</string>
+
     <!-- File sizes -->
     <string name="size_gb">%1$s ГБ</string>
     <string name="size_mb">%1$s МБ</string>
@@ -34,8 +45,6 @@
     <string name="reader_clear_search">Очистить поиск</string>
     <string name="reader_title_search">Поиск «%1$s»</string>
     <string name="reader_contents">Оглавление</string>
-    <string name="reader_contrast">Контраст</string>
-    <string name="contrast_as_scanned">Как в скане</string>
     <string name="reader_page_description">Страница %1$d</string>
     <string name="reader_page_slider">Ползунок страниц</string>
     <string name="reader_zoom_in">Увеличить</string>

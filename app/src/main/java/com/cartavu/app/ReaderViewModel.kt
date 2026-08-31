@@ -133,8 +133,13 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private val _contrast = MutableStateFlow(0f)
     val contrast: StateFlow<Float> = _contrast.asStateFlow()
 
+    /** What pages are toned to. Held and written back the same way as contrast. */
+    private val _colorMode = MutableStateFlow(PageColorMode.NORMAL)
+    val colorMode: StateFlow<PageColorMode> = _colorMode.asStateFlow()
+
     init {
         viewModelScope.launch { _contrast.value = library.contrast.first() }
+        viewModelScope.launch { _colorMode.value = library.colorMode.first() }
     }
 
     fun setContrast(value: Float) {
@@ -142,6 +147,12 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         if (clamped == _contrast.value) return
         _contrast.value = clamped
         viewModelScope.launch { library.saveContrast(clamped) }
+    }
+
+    fun setColorMode(mode: PageColorMode) {
+        if (mode == _colorMode.value) return
+        _colorMode.value = mode
+        viewModelScope.launch { library.saveColorMode(mode) }
     }
 
     val recents: StateFlow<List<RecentDocument>> = library.recents.stateIn(

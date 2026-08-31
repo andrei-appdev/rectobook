@@ -4,7 +4,6 @@
 - add app versioning
 
 - multilanguage support?
-- menu with settings, about and other options?
 
 ## PDF, left over from the first pass
 

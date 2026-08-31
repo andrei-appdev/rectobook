@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
@@ -134,23 +135,24 @@ internal val ContentsIcon: Icon24 = { u ->
 }
 
 /**
- * Contrast: the printer's tone mark, a ring with one half filled.
+ * The way in to everything that is true of the app rather than of a document:
+ * three plain rules.
  *
- * Everything here is drawn with one stroked pen, so the filled half is hatched
- * with rules close enough to read as solid at the size an icon is shown.
+ * [ContentsIcon] is the same three rules with leaders, which is what tells the
+ * two apart - one lists a document, the other opens the app's own drawer. They
+ * are never on the same screen.
  */
-internal val ContrastIcon: Icon24 = { u ->
-    addOval(Rect(3.5f * u, 3.5f * u, 20.5f * u, 20.5f * u))
-    // Chords of the right half of that circle, at 1.4-unit intervals. The
-    // circle has radius 8.5 about (12, 12), so a rule at height y runs from
-    // the middle out to sqrt(8.5^2 - (y - 12)^2).
-    var y = 5.0f
-    while (y <= 19.0f) {
-        val dy = y - 12f
-        val half = kotlin.math.sqrt((8.5f * 8.5f - dy * dy).coerceAtLeast(0f))
-        moveTo(12 * u, y * u); lineTo((12f + half) * u, y * u)
-        y += 1.4f
+internal val MenuIcon: Icon24 = { u ->
+    for (y in intArrayOf(7, 12, 17)) {
+        moveTo(4 * u, y * u); lineTo(20 * u, y * u)
     }
+}
+
+/** The mark on a row that leads somewhere else: [BackIcon]'s head, reversed. */
+internal val ForwardIcon: Icon24 = { u ->
+    moveTo(5 * u, 12 * u); lineTo(19 * u, 12 * u)
+    moveTo(19 * u, 12 * u); lineTo(13 * u, 6 * u)
+    moveTo(19 * u, 12 * u); lineTo(13 * u, 18 * u)
 }
 
 /** A 6.5-unit lens with its handle running out to (20.5, 20.5). */
@@ -344,7 +346,6 @@ fun ReaderTopBar(
     backLabel: String,
     onBack: () -> Unit,
     onSearch: () -> Unit,
-    onContrast: () -> Unit,
     modifier: Modifier = Modifier,
     // Only for documents that carry one. A button that opens an empty screen
     // teaches the reader to stop pressing it.
@@ -377,7 +378,6 @@ fun ReaderTopBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
             )
-            IconAction(ContrastIcon, stringResource(R.string.reader_contrast), onContrast)
             onContents?.let { IconAction(ContentsIcon, stringResource(R.string.reader_contents), it) }
             IconAction(SearchIcon, stringResource(R.string.search_in_document), onSearch)
         }
@@ -614,6 +614,132 @@ private fun PageSlider(
     }
 }
 
+/**
+ * A 0f..1f slider, drawn the way this design draws a range: the same 2dp rule
+ * with a caliper mark on it that [PageSlider] rides, nothing rounded.
+ *
+ * Live - the value follows the finger rather than waiting for it to lift, so
+ * whatever it is set against moves while it is being judged.
+ */
+@Composable
+internal fun ValueSlider(
+    value: Float,
+    label: String,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Read here rather than in the draw lambda, which is not a composable.
+    val trackColor = onSurfaceAlpha(0.14f)
+    val markColor = IndustryAccent
+    val fraction = value.coerceIn(0f, 1f)
+
+    Canvas(
+        modifier = modifier
+            .height(28.dp)
+            .semantics {
+                contentDescription = label
+                progressBarRangeInfo = ProgressBarRangeInfo(current = fraction, range = 0f..1f)
+                setProgress { target ->
+                    onValueChange(target.coerceIn(0f, 1f))
+                    true
+                }
+            }
+            .pointerInput(Unit) {
+                // Value under x, in this slider's own coordinates. Inverse of
+                // the centre the draw below computes.
+                fun valueAt(x: Float): Float {
+                    val span = size.width - ThumbWidth.toPx()
+                    if (span <= 0f) return 0f
+                    return ((x - ThumbWidth.toPx() / 2f) / span).coerceIn(0f, 1f)
+                }
+
+                awaitEachGesture {
+                    val down = awaitFirstDown()
+                    down.consume()
+                    onValueChange(valueAt(down.position.x))
+                    horizontalDrag(down.id) { change ->
+                        change.consume()
+                        onValueChange(valueAt(change.position.x))
+                    }
+                }
+            },
+    ) {
+        val track = TrackThickness.toPx()
+        val thumbW = ThumbWidth.toPx()
+        val thumbH = ThumbHeight.toPx()
+        val trackTop = (size.height - track) / 2f
+        val centre = thumbW / 2f + (size.width - thumbW) * fraction
+
+        drawRect(
+            color = trackColor,
+            topLeft = Offset(0f, trackTop),
+            size = Size(size.width, track),
+        )
+        drawRect(
+            color = markColor,
+            topLeft = Offset(0f, trackTop),
+            size = Size(centre, track),
+        )
+        drawRect(
+            color = markColor,
+            topLeft = Offset(centre - thumbW / 2f, (size.height - thumbH) / 2f),
+            size = Size(thumbW, thumbH),
+        )
+    }
+}
+
+/** The height of a row of segments carrying words rather than marks. */
+private val LabelSegHeight = 38.dp
+
+/**
+ * The design's `.seg` carrying a choice: one bordered box, its options divided
+ * by hairlines, the chosen one filled with the accent.
+ *
+ * A row rather than a list of radio buttons because the options are few, short
+ * and mutually exclusive, and because the design already draws a segment this
+ * way for zoom.
+ */
+@Composable
+internal fun <T> SegmentedChoice(
+    options: List<T>,
+    selected: T,
+    label: @Composable (T) -> String,
+    onSelect: (T) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier.height(LabelSegHeight).border(1.dp, IndustryDivider),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        options.forEachIndexed { index, option ->
+            if (index > 0) SegDivider(height = LabelSegHeight)
+            val chosen = option == selected
+            val text = label(option)
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .height(LabelSegHeight)
+                    .background(if (chosen) IndustryAccent else Color.Transparent)
+                    .selectable(
+                        selected = chosen,
+                        onClick = { onSelect(option) },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelLarge.copy(letterSpacing = 0.04.em),
+                    // On the accent, the app's ground is the ink - the same
+                    // pairing `PrimaryAction` uses.
+                    color = if (chosen) IndustryBackground else IndustryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun SegButton(
     icon: Icon24,
@@ -633,8 +759,8 @@ private fun SegButton(
 }
 
 @Composable
-private fun SegDivider() {
-    Box(modifier = Modifier.width(1.dp).height(30.dp).background(IndustryDivider))
+private fun SegDivider(height: Dp = 30.dp) {
+    Box(modifier = Modifier.width(1.dp).height(height).background(IndustryDivider))
 }
 
 /** The design's 1px divider, drawn as a rule across whatever it is given. */
