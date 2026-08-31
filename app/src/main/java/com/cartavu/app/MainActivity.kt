@@ -78,11 +78,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalConfiguration
@@ -125,8 +130,35 @@ private const val ZOOM_STEP = 1.5f
 /** How long the page must settle before reading progress is written. */
 private const val PROGRESS_SAVE_DELAY_MS = 600L
 
-/** How long zoom must settle before pages are re-rendered at the new scale. */
-private const val ZOOM_SETTLE_DELAY_MS = 150L
+/**
+ * How long the view must settle before a detail tile is decoded for it.
+ *
+ * A pinch changes the scale every frame and a fling changes the visible region
+ * as fast; decoding for either as it happens would abandon a tile per frame.
+ */
+private const val TILE_SETTLE_DELAY_MS = 150L
+
+/**
+ * How far a detail tile reaches past the visible region, and the grid its
+ * origin is snapped to, both in page pixels.
+ *
+ * The skirt means a small pan is already covered by the tile in hand, and the
+ * grid means the request only changes once the view has moved a real distance
+ * - between them a drag asks for a handful of tiles rather than one a frame.
+ */
+private const val TILE_MARGIN = 96
+private const val TILE_GRID = 96
+
+/**
+ * How much wider than its whole-page rendering a page must be laid out before
+ * a detail tile is worth decoding.
+ *
+ * Fit-width lands the page on its bitmap 1:1, give or take the pixel that
+ * rounding through dp can cost - without a threshold that pixel would have
+ * every page at rest asking for a tile that could not improve on what is
+ * already there.
+ */
+private const val TILE_MIN_GAIN = 32
 
 /**
  * Gap between pages. Narrow enough that the backdrop reads as a rule between
@@ -296,6 +328,11 @@ private fun DocumentReader(
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     var showGoToSheet by remember { mutableStateOf(false) }
+    var showContrastSheet by remember { mutableStateOf(false) }
+    val contrast by viewModel.contrast.collectAsState()
+    // One filter for the whole document rather than one per page: it depends
+    // on nothing but the setting, and every page is drawn through it.
+    val pageFilter = remember(contrast) { pageContrastFilter(contrast) }
     var showSearch by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     val searchResults by viewModel.search.collectAsState()
@@ -443,14 +480,6 @@ private fun DocumentReader(
     // fit-to-width, so the same number goes on meaning the same thing when the
     // screen turns and the width it multiplies changes.
     var zoom by rememberSaveable { mutableStateOf(MIN_ZOOM) }
-    // Pages lay out at `zoom` immediately but are re-rendered only at
-    // `renderZoom`. A pinch changes zoom every frame, and re-rendering on
-    // each one would cancel the previous decode over and over.
-    //
-    // Saved alongside `zoom`, so a rotation re-renders pages straight at the
-    // restored scale instead of showing them at fit-width until the settle
-    // delay catches up.
-    var renderZoom by rememberSaveable { mutableStateOf(MIN_ZOOM) }
     // Live pinch state: scale applied on the GPU until the fingers lift.
     var gestureScale by remember { mutableFloatStateOf(1f) }
     var gestureFocus by remember { mutableStateOf(Offset.Zero) }
@@ -459,12 +488,15 @@ private fun DocumentReader(
 
     LaunchedEffect(zoom) {
         if (zoom == MIN_ZOOM) horizontalScroll.scrollTo(0)
-        delay(ZOOM_SETTLE_DELAY_MS)
-        renderZoom = zoom
     }
 
     val contentWidthDp = with(LocalDensity.current) { (viewport.width * zoom).toInt().toDp() }
-    val renderWidth = (viewport.width * renderZoom).toInt()
+    // The whole-page rendering is pinned to fit-width and never chases the
+    // zoom. Above that scale the sharpness comes from a detail tile covering
+    // what is actually on screen, which is bounded where a whole page grown to
+    // 5x is not - so zooming in now costs less memory than it used to rather
+    // than more, and settles sharper.
+    val baseWidth = viewport.width
 
     // Identity of the marks a page should be showing. The hit count is in it
     // because a scan still running keeps finding more on pages already drawn.
@@ -694,7 +726,8 @@ private fun DocumentReader(
                                 ?: state.defaultAspectRatio
                             PageView(
                                 pageNumber = index,
-                                renderWidth = renderWidth,
+                                baseWidth = baseWidth,
+                                pageFilter = pageFilter,
                                 aspectRatio = aspectRatio,
                                 // Changes when the search does, which is what
                                 // sends a page to look up its marks again.
@@ -733,6 +766,10 @@ private fun DocumentReader(
             onSearch = {
                 viewModel.clearSelection()
                 showSearch = true
+            },
+            onContrast = {
+                viewModel.clearSelection()
+                showContrastSheet = true
             },
             onContents = if (outline.isEmpty()) {
                 null
@@ -825,6 +862,14 @@ private fun DocumentReader(
         )
     }
 
+    if (showContrastSheet) {
+        ContrastSheet(
+            contrast = contrast,
+            onContrastChange = viewModel::setContrast,
+            onDismiss = { showContrastSheet = false },
+        )
+    }
+
     if (showGoToSheet) {
         GoToPageSheet(
             pageCount = state.pageCount,
@@ -887,14 +932,74 @@ private suspend fun LazyListState.scrollToAnchor(page: Int, fraction: Float) {
 }
 
 /**
+ * The part of a page a detail tile should cover, in the page's own laid-out
+ * pixels. [pageWidth] and [pageHeight] are the size the page is laid out at,
+ * which is what makes the request stale when the zoom changes.
+ */
+private data class TileRequest(
+    val pageWidth: Int,
+    val pageHeight: Int,
+    val clipX: Int,
+    val clipY: Int,
+    val width: Int,
+    val height: Int,
+)
+
+/** A rendered tile, kept with the request it answers so it can be placed. */
+private data class PageTile(val request: TileRequest, val bitmap: android.graphics.Bitmap)
+
+/**
+ * What this page needs rendered sharply, or null if its whole-page bitmap is
+ * already at least as detailed as the page is drawn.
+ *
+ * The visible rectangle is taken from the layout rather than passed down: the
+ * bounds are already clipped by the list and the horizontal scroller above it,
+ * and mapping them back through [LayoutCoordinates.windowToLocal] undoes any
+ * scale a pinch has applied - so this is the page's own coordinate space
+ * whatever is happening on screen.
+ */
+private fun tileRequestFor(coordinates: LayoutCoordinates, baseWidth: Int): TileRequest? {
+    val pageWidth = coordinates.size.width
+    val pageHeight = coordinates.size.height
+    if (pageWidth - baseWidth < TILE_MIN_GAIN || pageHeight <= 0) return null
+
+    val bounds = coordinates.boundsInWindow()
+    if (bounds.isEmpty) return null
+    val topLeft = coordinates.windowToLocal(bounds.topLeft)
+    val bottomRight = coordinates.windowToLocal(bounds.bottomRight)
+
+    // Snapped out to a grid and widened by a skirt, so that scrolling asks for
+    // a new tile every TILE_GRID pixels rather than every frame.
+    fun snapDown(value: Float) = (value.toInt() - TILE_MARGIN).floorDiv(TILE_GRID) * TILE_GRID
+    fun snapUp(value: Float) =
+        (kotlin.math.ceil(value).toInt() + TILE_MARGIN + TILE_GRID - 1).floorDiv(TILE_GRID) * TILE_GRID
+
+    val left = snapDown(topLeft.x).coerceIn(0, pageWidth)
+    val top = snapDown(topLeft.y).coerceIn(0, pageHeight)
+    val right = snapUp(bottomRight.x).coerceIn(0, pageWidth)
+    val bottom = snapUp(bottomRight.y).coerceIn(0, pageHeight)
+    if (right <= left || bottom <= top) return null
+
+    return TileRequest(
+        pageWidth = pageWidth,
+        pageHeight = pageHeight,
+        clipX = left,
+        clipY = top,
+        width = right - left,
+        height = bottom - top,
+    )
+}
+
+/**
  * One page of the document. Rendering is tied to the composable's lifetime, so
  * scrolling a page off screen cancels its render.
  */
 @Composable
 private fun PageView(
     pageNumber: Int,
-    renderWidth: Int,
+    baseWidth: Int,
     aspectRatio: Float,
+    pageFilter: ColorFilter?,
     highlightKey: String,
     selection: TextSelection?,
     onCopy: () -> Unit,
@@ -911,16 +1016,44 @@ private fun PageView(
     val highlightWash = accent.copy(alpha = 0.32f)
     val selectionWash = accent.copy(alpha = 0.30f)
     // Seeded from whatever is already in memory, and deliberately not keyed on
-    // renderWidth, so a page never blanks: zooming keeps showing the previous
-    // rendering scaled until a sharper one arrives, and an item recomposed by
-    // the list picks its bitmap straight back up.
+    // baseWidth, so a page never blanks: a width change keeps showing the
+    // previous rendering scaled until a sharper one arrives, and an item
+    // recomposed by the list picks its bitmap straight back up.
     var bitmap by remember(pageNumber) { mutableStateOf(viewModel.cachedPage(pageNumber)) }
 
-    LaunchedEffect(pageNumber, renderWidth) {
+    LaunchedEffect(pageNumber, baseWidth) {
         // Re-seed in case this page was rendered while the item was away.
         viewModel.cachedPage(pageNumber)?.let { if (bitmap == null) bitmap = it }
-        val rendered = viewModel.renderPage(pageNumber, renderWidth)
+        val rendered = viewModel.renderPage(pageNumber, baseWidth)
         if (rendered != null) bitmap = rendered
+    }
+
+    // The sharp rendering of whatever part of this page is on screen, once the
+    // page is laid out larger than its whole-page bitmap. Null the rest of the
+    // time, which is the whole of what this costs at fit-width.
+    var tileRequest by remember(pageNumber) { mutableStateOf<TileRequest?>(null) }
+    var tile by remember(pageNumber) { mutableStateOf<PageTile?>(null) }
+
+    LaunchedEffect(pageNumber, tileRequest) {
+        val request = tileRequest
+        if (request == null) {
+            tile = null
+            return@LaunchedEffect
+        }
+        // A tile cut for a different page size no longer registers with what is
+        // on screen, so it goes rather than being drawn in the wrong place. The
+        // whole-page bitmap underneath covers the gap.
+        if (tile?.request?.pageWidth != request.pageWidth) tile = null
+        delay(TILE_SETTLE_DELAY_MS)
+        viewModel.renderTile(
+            pageNumber = pageNumber,
+            pageWidth = request.pageWidth,
+            pageHeight = request.pageHeight,
+            clipX = request.clipX,
+            clipY = request.clipY,
+            regionWidth = request.width,
+            regionHeight = request.height,
+        )?.let { tile = PageTile(request, it) }
     }
 
     // Whether this page has been empty long enough to be worth marking.
@@ -967,6 +1100,13 @@ private fun PageView(
             .fillMaxWidth()
             .aspectRatio(aspectRatio)
             .onSizeChanged { pageSize = it }
+            // Fires on every scrolled frame, so the quantised request is
+            // compared before it is published - an unchanged one must not
+            // restart the decode below.
+            .onGloballyPositioned { coordinates ->
+                val request = tileRequestFor(coordinates, baseWidth)
+                if (request != tileRequest) tileRequest = request
+            }
             // Press and hold to take a word. The list is still scrollable at
             // this point, but a press that has not travelled is not a scroll,
             // so nothing has to be taken from it.
@@ -1029,7 +1169,32 @@ private fun PageView(
                 contentDescription = stringResource(R.string.reader_page_description, pageNumber + 1),
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Fit,
+                colorFilter = pageFilter,
             )
+        }
+
+        // The sharp rendering of what is on screen, laid over the whole-page
+        // one. Drawn before the links and the marks, which belong on top of
+        // the page however it was arrived at.
+        tile?.let { detail ->
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                // 1:1 whenever the page is still the size the tile was cut
+                // for, which is the case for all but the frame or two after a
+                // zoom - the scale keeps it registered through those too.
+                val scale = size.width / detail.request.pageWidth
+                drawImage(
+                    image = detail.bitmap.asImageBitmap(),
+                    dstOffset = IntOffset(
+                        (detail.request.clipX * scale).roundToInt(),
+                        (detail.request.clipY * scale).roundToInt(),
+                    ),
+                    dstSize = IntSize(
+                        (detail.request.width * scale).roundToInt(),
+                        (detail.request.height * scale).roundToInt(),
+                    ),
+                    colorFilter = pageFilter,
+                )
+            }
         }
 
         // A link is invisible in the page's own picture, so it is ruled under.

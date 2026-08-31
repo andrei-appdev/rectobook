@@ -18,7 +18,7 @@ capture a screenshot (PowerShell corrupts it).
 | emulator | `%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe` |
 | AVD | `djvu_test` (usually already running as `emulator-5554`) |
 | APK | `app\build\outputs\apk\debug\app-debug.apk` |
-| Activity | `com.djvureader.app/.MainActivity` |
+| Activity | `com.cartavu.app/.MainActivity` |
 
 ## Build
 
@@ -71,8 +71,8 @@ Force-stop before relaunching, or the running process stays up and the new
 code never loads:
 
 ```bash
-./adb.exe shell am force-stop com.djvureader.app
-./adb.exe shell am start -n com.djvureader.app/.MainActivity
+./adb.exe shell am force-stop com.cartavu.app
+./adb.exe shell am start -n com.cartavu.app/.MainActivity
 ```
 
 If no device is listed by `adb devices`, start the AVD in the background:
@@ -128,7 +128,7 @@ says:
 ```bash
 ./adb.exe logcat -c                                   # clear, then reproduce
 ./adb.exe logcat -d -s AndroidRuntime:E CRASH:E
-./adb.exe logcat -d --pid=$(./adb.exe shell pidof com.djvureader.app)
+./adb.exe logcat -d --pid=$(./adb.exe shell pidof com.cartavu.app)
 ```
 
 To trace something, add a temporary `android.util.Log` call and filter on its

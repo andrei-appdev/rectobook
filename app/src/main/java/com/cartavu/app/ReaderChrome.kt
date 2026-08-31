@@ -133,6 +133,26 @@ internal val ContentsIcon: Icon24 = { u ->
     }
 }
 
+/**
+ * Contrast: the printer's tone mark, a ring with one half filled.
+ *
+ * Everything here is drawn with one stroked pen, so the filled half is hatched
+ * with rules close enough to read as solid at the size an icon is shown.
+ */
+internal val ContrastIcon: Icon24 = { u ->
+    addOval(Rect(3.5f * u, 3.5f * u, 20.5f * u, 20.5f * u))
+    // Chords of the right half of that circle, at 1.4-unit intervals. The
+    // circle has radius 8.5 about (12, 12), so a rule at height y runs from
+    // the middle out to sqrt(8.5^2 - (y - 12)^2).
+    var y = 5.0f
+    while (y <= 19.0f) {
+        val dy = y - 12f
+        val half = kotlin.math.sqrt((8.5f * 8.5f - dy * dy).coerceAtLeast(0f))
+        moveTo(12 * u, y * u); lineTo((12f + half) * u, y * u)
+        y += 1.4f
+    }
+}
+
 /** A 6.5-unit lens with its handle running out to (20.5, 20.5). */
 internal val SearchIcon: Icon24 = { u ->
     addOval(Rect(4.5f * u, 4.5f * u, 17.5f * u, 17.5f * u))
@@ -324,6 +344,7 @@ fun ReaderTopBar(
     backLabel: String,
     onBack: () -> Unit,
     onSearch: () -> Unit,
+    onContrast: () -> Unit,
     modifier: Modifier = Modifier,
     // Only for documents that carry one. A button that opens an empty screen
     // teaches the reader to stop pressing it.
@@ -356,6 +377,7 @@ fun ReaderTopBar(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f).padding(horizontal = 2.dp),
             )
+            IconAction(ContrastIcon, stringResource(R.string.reader_contrast), onContrast)
             onContents?.let { IconAction(ContentsIcon, stringResource(R.string.reader_contents), it) }
             IconAction(SearchIcon, stringResource(R.string.search_in_document), onSearch)
         }

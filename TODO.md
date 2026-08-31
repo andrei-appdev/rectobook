@@ -19,13 +19,30 @@
       own, so this is an App Bundle / ABI-splits question rather than a real
       per-user cost - but the project builds one universal APK today.
 
+## Rendering
+
+- [ ] **`documentLock` now serialises tile decodes too.** Every render, text
+      extraction, link lookup and per-drag `selectionRects` call queues on the
+      one mutex, and zoomed reading adds a tile decode per settled pan. Nothing
+      observably stalls today, but a drag over text at high zoom is the case
+      that would show it first.
+- [ ] **A cancelled render still does its work.** The JNI call blocks and is
+      not interruptible, so scrolling a page away mid-decode finishes the
+      decode and then throws the bitmap away without caching it. Banking the
+      result instead would cost nothing.
+- [ ] **Nothing is prefetched.** Pages render when they enter composition, so a
+      fast scroll shows blank paper first. `LazyColumn`'s own one-item
+      lookahead is all there is.
+- [ ] **PDF thumbnails block reader renders.** `PdfDocument` takes a
+      process-wide `PdfiumLock`, so the library's thumbnailer and the reader
+      contend on it.
+
 ## Repo hygiene
 
-- [ ] **Add a top-level `LICENSE`.** DjVuLibre is GPLv2+, so the combined work
-      falls under the GPL once distributed. The only license text currently in
-      the repo is `app/src/main/cpp/djvulibre/COPYING`, which reads as covering
-      just the vendored library rather than this app. Needed before the code
-      goes anywhere public.
+- [x] **Add a top-level `LICENSE`.** GPLv2 text at the repo root, with the
+      component inventory and the distribution obligation in
+      `licenses/README.md`. Source files carry no GPL header yet - the GPL
+      recommends one per file, and nothing here has one.
 - [ ] **Add `.gitattributes`.** Git reported LF→CRLF conversion for `gradlew`
       and the `.properties` files. Committed blobs are normalized to LF, so
       Linux/macOS/CI clones are fine, but a future checkout can rewrite the

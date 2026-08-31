@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An Android DjVu + PDF reader (`com.djvureader.app`), Kotlin + Jetpack Compose,
+An Android DjVu + PDF reader (`com.cartavu.app`), Kotlin + Jetpack Compose,
 with DjVuLibre vendored as C++ under `app/src/main/cpp/djvulibre` and reached
 through a hand-written JNI layer. PDF goes through the prebuilt
 `io.legere:pdfiumandroid` AAR instead — PDFium builds via GN/depot_tools, which
@@ -69,6 +69,24 @@ not race the document being closed. It also owns the page bitmap `LruCache`
 (sized off the heap, evicted bitmaps deliberately *not* recycled), the page-text
 cache, link cache, search, selection and outline state.
 
+**Rendering is two layers.** `renderPage` draws a whole page at **fit-width and
+never at more** — zooming does not re-render it. Detail above that scale comes
+from `renderTile`, which calls `PagedDocument.renderRegion` for just the part of
+the page on screen and draws it over the whole-page bitmap. A tile is
+viewport-sized whatever the zoom, so 5× costs less memory than a whole page
+grown to 5× did, and `MAX_RENDER_PIXELS` stopped being a sharpness ceiling.
+`PageView` decides what to ask for from its own `onGloballyPositioned` bounds,
+snapped to a grid and given a skirt so a drag asks for a handful of tiles
+rather than one per frame; the whole-page bitmap stays underneath throughout,
+so a page never blanks. Tiles live in their own `LruCache`, apart from the page
+one they would otherwise evict.
+
+**Tone is a draw-time filter.** The contrast setting (`ContrastSheet.kt`,
+persisted globally by `LibraryStore`) is a `ColorFilter` levels stretch passed
+to both the page `Image` and the tile draw — never baked into a decode, so it
+costs no memory, applies to DjVu and PDF alike, and moves on the same frame as
+the slider.
+
 **Screens.** `MainActivity.kt` holds the reader itself (page list, zoom, pan,
 selection, links) and switches on `ReaderState` — Empty renders `LibraryScreen`,
 Loaded renders `DocumentReader`. Other screens are one file each: `SearchScreen`,
@@ -105,9 +123,11 @@ string in a Preferences DataStore, keyed by the persisted content URI.
 
 - `TODO.md` — open work, known gaps, and environment notes. Keep it current;
   the QA subagent files findings here.
-- `licenses/` — bundled font licences. DjVuLibre is GPLv2+, so the combined work
-  is GPL once distributed; the project has accepted that rather than isolating
-  the decoder. A top-level `LICENSE` is still outstanding.
+- `LICENSE` / `licenses/` — the app is GPL-2.0-or-later, because DjVuLibre is
+  GPLv2+ and compiled in rather than isolated behind a process boundary. The
+  root `LICENSE` is the GPLv2 text; `licenses/README.md` is the component
+  inventory (DjVuLibre, PdfiumAndroid/PDFium, Fira Sans) and the note that
+  shipping a build obliges offering the source of the whole app.
 - `store/` — artwork for the Play listing. `play-icon-512.png` is the launcher
   mark rendered off the same geometry as `res/drawable/ic_launcher_foreground.xml`,
   at the full 108dp canvas rather than the crop a launcher mask shows.

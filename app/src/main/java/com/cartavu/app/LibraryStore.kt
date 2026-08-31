@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -85,6 +86,24 @@ class LibraryStore(private val context: Context) {
     suspend fun lastPage(key: String): Int =
         recents.first().firstOrNull { it.key == key }?.lastPage ?: 0
 
+    /**
+     * How hard the reader is pulling contrast on a page, 0f..1f.
+     *
+     * A property of the reader rather than of a document: someone reading
+     * faded scans is usually reading a shelf of them, and having to set it
+     * again on each one would be the whole of the annoyance it removes.
+     */
+    val contrast: Flow<Float> =
+        context.libraryDataStore.data.map { preferences ->
+            preferences[CONTRAST_KEY]?.coerceIn(0f, 1f) ?: 0f
+        }
+
+    suspend fun saveContrast(value: Float) {
+        context.libraryDataStore.edit { preferences ->
+            preferences[CONTRAST_KEY] = value.coerceIn(0f, 1f)
+        }
+    }
+
     private fun decode(raw: String?): List<RecentDocument> {
         if (raw.isNullOrBlank()) return emptyList()
         return runCatching {
@@ -130,6 +149,7 @@ class LibraryStore(private val context: Context) {
 
     companion object {
         private val RECENTS_KEY = stringPreferencesKey("recents")
+        private val CONTRAST_KEY = floatPreferencesKey("contrast")
         private const val MAX_RECENTS = 20
     }
 }

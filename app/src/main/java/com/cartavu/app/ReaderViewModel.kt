@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -98,6 +99,16 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private val latestKeyByPage = ConcurrentHashMap<Int, String>()
 
     /**
+     * Detail tiles, kept apart from [pageCache] deliberately. A tile is as big
+     * as the viewport and lives only as long as the reader stays where it is;
+     * letting them into the page cache would have them evict the very
+     * whole-page bitmaps they are drawn on top of.
+     */
+    private val tileCache = object : LruCache<String, Bitmap>(tileCacheSizeBytes()) {
+        override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+    }
+
+    /**
      * Whatever rendering of [pageNumber] is already in memory, at any width, or
      * null if the page has never been rendered.
      *
@@ -111,6 +122,27 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         latestKeyByPage[pageNumber]?.let { pageCache.get(it) }
 
     private val library = LibraryStore(application)
+
+    /**
+     * How hard to pull contrast on a rendered page, 0f (as the scan is) to 1f.
+     *
+     * Held here rather than collected from [LibraryStore] so that dragging the
+     * control moves the page on the same frame; the store is written behind it
+     * and is only read back when the process starts again.
+     */
+    private val _contrast = MutableStateFlow(0f)
+    val contrast: StateFlow<Float> = _contrast.asStateFlow()
+
+    init {
+        viewModelScope.launch { _contrast.value = library.contrast.first() }
+    }
+
+    fun setContrast(value: Float) {
+        val clamped = value.coerceIn(0f, 1f)
+        if (clamped == _contrast.value) return
+        _contrast.value = clamped
+        viewModelScope.launch { library.saveContrast(clamped) }
+    }
 
     val recents: StateFlow<List<RecentDocument>> = library.recents.stateIn(
         scope = viewModelScope,
@@ -178,6 +210,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             documentLock.withLock {
                 closing?.close()
                 pageCache.evictAll()
+                tileCache.evictAll()
                 latestKeyByPage.clear()
             }
         }
@@ -227,6 +260,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
                         document?.close()
                         document = null
                         pageCache.evictAll()
+                        tileCache.evictAll()
                         latestKeyByPage.clear()
                         val opened = openDocument(getApplication(), local.file)
                         document = opened
@@ -541,6 +575,56 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
+     * A sharp rendering of one rectangle of a page, for when the page is laid
+     * out larger than [renderPage] renders it.
+     *
+     * [pageWidth] and [pageHeight] are the size the page occupies on screen;
+     * the clip and region are a rectangle of that. Zooming grows the page
+     * while the region stays viewport-sized, so this costs a bounded amount
+     * however far in the reader goes - which is what lets [renderPage] stop at
+     * fit-width instead of chasing the zoom.
+     */
+    suspend fun renderTile(
+        pageNumber: Int,
+        pageWidth: Int,
+        pageHeight: Int,
+        clipX: Int,
+        clipY: Int,
+        regionWidth: Int,
+        regionHeight: Int,
+    ): Bitmap? {
+        if (pageWidth <= 0 || pageHeight <= 0) return null
+        if (regionWidth <= 0 || regionHeight <= 0) return null
+        // DjVuLibre refuses a clip that falls outside the scaled page rather
+        // than clamping it, so the caller's arithmetic is checked here.
+        if (clipX < 0 || clipY < 0) return null
+        if (clipX + regionWidth > pageWidth || clipY + regionHeight > pageHeight) return null
+        if (regionWidth.toLong() * regionHeight > MAX_TILE_PIXELS) return null
+
+        val key = tileKey(pageNumber, pageWidth, clipX, clipY, regionWidth, regionHeight)
+        tileCache.get(key)?.let { return it }
+
+        val rendered = withContext(Dispatchers.IO) {
+            documentLock.withLock {
+                val doc = document ?: return@withLock null
+                // Another page may have rendered this while we queued.
+                tileCache.get(key)?.let { return@withLock it }
+                doc.renderRegion(
+                    pageNumber = pageNumber,
+                    pageWidth = pageWidth,
+                    pageHeight = pageHeight,
+                    clipX = clipX,
+                    clipY = clipY,
+                    regionWidth = regionWidth,
+                    regionHeight = regionHeight,
+                )
+            }
+        } ?: return null
+        tileCache.put(key, rendered)
+        return rendered
+    }
+
+    /**
      * Largest width whose rendered page stays within [MAX_RENDER_PIXELS].
      * Given height = width / aspect, area = width^2 / aspect.
      */
@@ -556,6 +640,7 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         val closing = document
         document = null
         pageCache.evictAll()
+        tileCache.evictAll()
         // viewModelScope is cancelled by now, so close on a detached scope -
         // still under the lock, so an in-flight render finishes first.
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
@@ -564,6 +649,9 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun cacheKey(pageNumber: Int, width: Int) = "$pageNumber@$width"
+
+    private fun tileKey(page: Int, pageWidth: Int, x: Int, y: Int, w: Int, h: Int) =
+        "$page@$pageWidth:$x,$y+${w}x$h"
 
     companion object {
         /** Fallback shape (roughly A4 portrait) for pages not yet measured. */
@@ -576,12 +664,35 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         private const val SEARCH_DEBOUNCE_MS = 250L
 
         /**
-         * Ceiling on a single rendered page, about 24 MB at ARGB_8888. Without
-         * it, zooming a 400dpi scan would ask for bitmaps of hundreds of
-         * megabytes. Region rendering (see DjvuDocument.renderRegion) is the
-         * real fix and would let this go away.
+         * Ceiling on a single rendered page, about 24 MB at ARGB_8888.
+         *
+         * The reader asks for whole pages at fit-width and gets the detail it
+         * needs above that from [renderTile], so this is no longer what zoom
+         * runs into - it is the guard for a page whose own shape is extreme,
+         * and for a window far wider than a phone's.
          */
         private const val MAX_RENDER_PIXELS = 6_000_000
+
+        /**
+         * Ceiling on one detail tile.
+         *
+         * A tile covers the visible region rather than the page, so its real
+         * size is the viewport plus a skirt however far the reader zooms - on
+         * a phone about 3.5 M pixels, on a large tablet about 5 M. This is a
+         * guard against a window far larger than either, not a limit reading
+         * runs into.
+         */
+        private const val MAX_TILE_PIXELS = 12_000_000
+
+        /**
+         * Room for a tile or two, so panning back over ground just covered is
+         * free. Sized off the heap for the same reason the page cache is: what
+         * a tile costs is set by the size of the screen it covers.
+         */
+        private fun tileCacheSizeBytes(): Int {
+            val eighthHeap = Runtime.getRuntime().maxMemory() / 8
+            return eighthHeap.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
 
         /**
          * A page rendered to a phone's width runs to several megabytes, so the

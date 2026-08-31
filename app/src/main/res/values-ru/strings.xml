@@ -34,6 +34,8 @@
     <string name="reader_clear_search">Очистить поиск</string>
     <string name="reader_title_search">Поиск «%1$s»</string>
     <string name="reader_contents">Оглавление</string>
+    <string name="reader_contrast">Контраст</string>
+    <string name="contrast_as_scanned">Как в скане</string>
     <string name="reader_page_description">Страница %1$d</string>
     <string name="reader_page_slider">Ползунок страниц</string>
     <string name="reader_zoom_in">Увеличить</string>

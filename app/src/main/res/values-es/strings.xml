@@ -35,6 +35,8 @@
     <string name="reader_clear_search">Borrar búsqueda</string>
     <string name="reader_title_search">Búsqueda «%1$s»</string>
     <string name="reader_contents">Índice</string>
+    <string name="reader_contrast">Contraste</string>
+    <string name="contrast_as_scanned">Sin ajustar</string>
     <string name="reader_page_description">Página %1$d</string>
     <string name="reader_page_slider">Control de páginas</string>
     <string name="reader_zoom_in">Acercar</string>
