@@ -48,8 +48,9 @@
     <string name="reader_contents">Índice</string>
     <string name="reader_page_description">Página %1$d</string>
     <string name="reader_page_slider">Control de páginas</string>
-    <string name="reader_zoom_in">Acercar</string>
-    <string name="reader_zoom_out">Alejar</string>
+    <string name="reader_previous_page">Página anterior</string>
+    <string name="reader_next_page">Página siguiente</string>
+    <string name="reader_go_to_page">Ir a la página</string>
     <string name="reader_copy">Copiar</string>
     <string name="reader_copy_description">Copiar el texto seleccionado</string>
 

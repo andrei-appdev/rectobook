@@ -45,9 +45,9 @@
     <string name="reader_page_of" translatable="false">%1$d / %2$d</string>
     <string name="reader_page_description">Page %1$d</string>
     <string name="reader_page_slider">Page slider</string>
-    <string name="reader_zoom_in">Zoom in</string>
-    <string name="reader_zoom_out">Zoom out</string>
-    <string name="reader_zoom_percent" translatable="false">%1$d%%</string>
+    <string name="reader_previous_page">Previous page</string>
+    <string name="reader_next_page">Next page</string>
+    <string name="reader_go_to_page">Go to page</string>
     <string name="reader_copy">Copy</string>
     <string name="reader_copy_description">Copy selected text</string>
 

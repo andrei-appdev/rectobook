@@ -119,7 +119,6 @@ import kotlinx.coroutines.launch
 /** Zoom is expressed as a multiple of fit-to-width. */
 private const val MIN_ZOOM = 1f
 private const val MAX_ZOOM = 5f
-private const val ZOOM_STEP = 1.5f
 
 /** How long the page must settle before reading progress is written. */
 private const val PROGRESS_SAVE_DELAY_MS = 600L
@@ -577,10 +576,6 @@ private fun DocumentReader(
         }
     }
 
-    // Buttons zoom about the middle of the viewport, so they anchor the same
-    // way a pinch does.
-    val viewportCentre = Offset(viewport.width / 2f, viewport.height / 2f)
-
     // Pages are numbered from 1 wherever the reader shows them; the list counts
     // from 0. Overlapping calls are safe - scrolling is mutually exclusive, so
     // dragging the slider leaves the last position asked for.
@@ -727,8 +722,8 @@ private fun DocumentReader(
                         // wherever the page runs under that too, so the first
                         // and last page clear those as well.
                         contentPadding = PaddingValues(
-                            top = 60.dp + if (portrait) 0.dp else statusStrip,
-                            bottom = 66.dp + navigationStrip,
+                            top = 54.dp + if (portrait) 0.dp else statusStrip,
+                            bottom = 72.dp + navigationStrip,
                         ),
                         verticalArrangement = Arrangement.spacedBy(PAGE_GAP),
                     ) {
@@ -755,13 +750,6 @@ private fun DocumentReader(
                 }
             }
         }
-
-        // Live during a pinch, so the readout tracks the fingers rather than
-        // jumping when they lift.
-        val zoomLabel = stringResource(
-            R.string.reader_zoom_percent,
-            (zoom * gestureScale * 100).roundToInt(),
-        )
 
         ReaderTopBar(
             // The term goes in the title, where the document's name would be:
@@ -795,15 +783,13 @@ private fun DocumentReader(
         ReaderBottomBar(
             currentPage = currentPage,
             pageCount = state.pageCount,
-            zoomLabel = zoomLabel,
-            canZoomOut = zoom > MIN_ZOOM,
-            canZoomIn = zoom < MAX_ZOOM,
             hidden = chromeHidden,
             onGoToPage = { showGoToSheet = true },
             onSeekToPage = ::goToPage,
-            onZoomOut = { zoomAbout(1f / ZOOM_STEP, viewportCentre) },
-            onZoomIn = { zoomAbout(ZOOM_STEP, viewportCentre) },
-            onZoomReset = { zoomAbout(MIN_ZOOM / zoom, viewportCentre) },
+            // Stepping from the page the counter names, which is the one
+            // filling the screen rather than the topmost one clipping it.
+            onPreviousPage = { goToPage(currentPage - 1) },
+            onNextPage = { goToPage(currentPage + 1) },
             modifier = Modifier.align(Alignment.BottomCenter),
         )
 

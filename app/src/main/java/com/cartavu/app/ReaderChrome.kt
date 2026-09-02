@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsIgnoringVisibility
 import androidx.compose.foundation.layout.systemBarsIgnoringVisibility
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -55,14 +54,10 @@ import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
-import com.cartavu.app.ui.theme.HeadingFont
 import com.cartavu.app.ui.theme.IndustryAccent
 import com.cartavu.app.ui.theme.IndustryBackground
 import com.cartavu.app.ui.theme.IndustryDivider
@@ -100,14 +95,6 @@ internal val FolderIcon: Icon24 = { u ->
     lineTo(4.5f * u, 19 * u)
     arcTo(corner(4.5f, 17.5f), 90f, 90f, false)
     close()
-}
-
-/** The design's go-to-page mark: ruled lines crossed by two slanted strokes. */
-internal val PagesIcon: Icon24 = { u ->
-    moveTo(4 * u, 9 * u); lineTo(20 * u, 9 * u)
-    moveTo(4 * u, 15 * u); lineTo(20 * u, 15 * u)
-    moveTo(10 * u, 4 * u); lineTo(8 * u, 20 * u)
-    moveTo(16 * u, 4 * u); lineTo(14 * u, 20 * u)
 }
 
 /**
@@ -161,13 +148,19 @@ internal val SearchIcon: Icon24 = { u ->
     moveTo(16 * u, 16 * u); lineTo(20.5f * u, 20.5f * u)
 }
 
-internal val MinusIcon: Icon24 = { u ->
-    moveTo(5 * u, 12 * u); lineTo(19 * u, 12 * u)
+/**
+ * The marks on the page stepper: a bare chevron each way.
+ *
+ * Not [BackIcon] and [ForwardIcon], which carry a shaft and are spoken for -
+ * on the top bar that arrow means leaving what is on screen, and one page
+ * further on is not that.
+ */
+internal val ChevronLeftIcon: Icon24 = { u ->
+    moveTo(15 * u, 5 * u); lineTo(8 * u, 12 * u); lineTo(15 * u, 19 * u)
 }
 
-internal val PlusIcon: Icon24 = { u ->
-    moveTo(12 * u, 5 * u); lineTo(12 * u, 19 * u)
-    moveTo(5 * u, 12 * u); lineTo(19 * u, 12 * u)
+internal val ChevronRightIcon: Icon24 = { u ->
+    moveTo(9 * u, 5 * u); lineTo(16 * u, 12 * u); lineTo(9 * u, 19 * u)
 }
 
 /** Draws an [Icon24] as the design does: stroked, 1.5 units wide, unfilled. */
@@ -366,7 +359,9 @@ fun ReaderTopBar(
                 .fillMaxWidth()
                 .clearOfStatusBar()
                 .clearOfNavigationBar(WindowInsetsSides.Horizontal)
-                .padding(horizontal = 8.dp, vertical = 5.dp),
+                // The 36dp mark squares set the bar's height; the padding is
+                // only what keeps them off its rule.
+                .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
@@ -386,23 +381,24 @@ fun ReaderTopBar(
 }
 
 /**
- * Reader bottom bar: the page indicator, a slider across the document, and the
- * zoom segment.
+ * Reader bottom bar: where in the document you are, and the two ways of
+ * getting somewhere else.
+ *
+ * Two lines rather than one. The counter is a line of its own, centred over
+ * the slider it names, and the slider gets the whole width beneath it with a
+ * step arrow at each end. Zoom is not here at all: a pinch already does it,
+ * and the segment that repeated it was taking the width the slider wanted.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ReaderBottomBar(
     currentPage: Int,
     pageCount: Int,
-    zoomLabel: String,
-    canZoomOut: Boolean,
-    canZoomIn: Boolean,
     hidden: Float,
     onGoToPage: () -> Unit,
     onSeekToPage: (Int) -> Unit,
-    onZoomOut: () -> Unit,
-    onZoomIn: () -> Unit,
-    onZoomReset: () -> Unit,
+    onPreviousPage: () -> Unit,
+    onNextPage: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val navigationStrip = WindowInsets.navigationBarsIgnoringVisibility
@@ -415,79 +411,63 @@ fun ReaderBottomBar(
             .background(IndustryBackground.copy(alpha = 0.94f)),
     ) {
         Hairline()
-        Row(
+        Column(
             // The bar reaches the bottom edge so that the page can too - its
             // controls sit above the navigation bar's strip, its background
             // fills it.
             modifier = Modifier
                 .fillMaxWidth()
                 .clearOfNavigationBar(WindowInsetsSides.Horizontal)
-                .padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                // As on the top bar, the controls set the height. The lower
+                // edge keeps 2dp more than the upper: below it is the strip
+                // the system's own buttons stand on, and they are not this
+                // bar's controls.
+                .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 4.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // `.btn`: square, hairline-bordered, transparent.
-            Row(
+            // A label that happens to be pressable rather than a button: it
+            // says where the document is open, which is not a thing to be
+            // operated, and a bordered block over the slider read as a second
+            // control competing with it. The padding is what makes the digits
+            // worth aiming at.
+            Text(
+                text = stringResource(R.string.reader_page_of, currentPage, pageCount),
+                style = MaterialTheme.typography.labelLarge.copy(
+                    letterSpacing = 0.04.em,
+                    fontFeatureSettings = TabularNums,
+                ),
                 modifier = Modifier
-                    .border(1.dp, IndustryDivider)
-                    .clickable(onClick = onGoToPage)
-                    .padding(horizontal = 11.dp, vertical = 7.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(7.dp),
-            ) {
-                StrokeIcon(PagesIcon, size = 15.dp)
-                Text(
-                    text = stringResource(R.string.reader_page_of, currentPage, pageCount),
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        letterSpacing = 0.04.em,
-                        fontFeatureSettings = TabularNums,
-                    ),
-                )
-            }
-
-            PageSlider(
-                currentPage = currentPage,
-                pageCount = pageCount,
-                onSeek = onSeekToPage,
-                modifier = Modifier.weight(1f),
+                    .clickable(
+                        onClickLabel = stringResource(R.string.reader_go_to_page),
+                        onClick = onGoToPage,
+                    )
+                    .padding(horizontal = 14.dp, vertical = 5.dp),
             )
 
-            // `.seg`: one bordered box, its options divided by hairlines.
             Row(
-                modifier = Modifier.border(1.dp, IndustryDivider),
+                modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                SegButton(
-                    MinusIcon,
-                    stringResource(R.string.reader_zoom_out),
-                    enabled = canZoomOut,
-                    onClick = onZoomOut,
+                // The arrows are fixed and the slider takes what is left, so
+                // the three of them are one screen wide at any width.
+                StepButton(
+                    ChevronLeftIcon,
+                    stringResource(R.string.reader_previous_page),
+                    enabled = currentPage > 1,
+                    onClick = onPreviousPage,
                 )
-                SegDivider()
-                Box(
-                    modifier = Modifier
-                        .widthIn(min = 48.dp)
-                        .height(30.dp)
-                        .clickable(onClick = onZoomReset),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = zoomLabel,
-                        style = TextStyle(
-                            fontFamily = HeadingFont,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 12.sp,
-                            letterSpacing = 0.04.em,
-                            fontFeatureSettings = TabularNums,
-                        ),
-                    )
-                }
-                SegDivider()
-                SegButton(
-                    PlusIcon,
-                    stringResource(R.string.reader_zoom_in),
-                    enabled = canZoomIn,
-                    onClick = onZoomIn,
+                PageSlider(
+                    currentPage = currentPage,
+                    pageCount = pageCount,
+                    onSeek = onSeekToPage,
+                    modifier = Modifier.weight(1f),
+                )
+                StepButton(
+                    ChevronRightIcon,
+                    stringResource(R.string.reader_next_page),
+                    enabled = currentPage < pageCount,
+                    onClick = onNextPage,
                 )
             }
         }
@@ -740,8 +720,12 @@ internal fun <T> SegmentedChoice(
     }
 }
 
+/**
+ * A bare mark that steps something on: no border of its own, because the two
+ * of them bracket the slider rather than standing as a pair of buttons.
+ */
 @Composable
-private fun SegButton(
+private fun StepButton(
     icon: Icon24,
     label: String,
     enabled: Boolean,
@@ -749,7 +733,7 @@ private fun SegButton(
 ) {
     Box(
         modifier = Modifier
-            .size(width = 32.dp, height = 30.dp)
+            .size(width = 40.dp, height = 32.dp)
             .clickable(enabled = enabled, onClickLabel = label, onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {

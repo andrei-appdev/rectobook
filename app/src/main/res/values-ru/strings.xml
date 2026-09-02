@@ -47,8 +47,9 @@
     <string name="reader_contents">Оглавление</string>
     <string name="reader_page_description">Страница %1$d</string>
     <string name="reader_page_slider">Ползунок страниц</string>
-    <string name="reader_zoom_in">Увеличить</string>
-    <string name="reader_zoom_out">Уменьшить</string>
+    <string name="reader_previous_page">Предыдущая страница</string>
+    <string name="reader_next_page">Следующая страница</string>
+    <string name="reader_go_to_page">Перейти к странице</string>
     <string name="reader_copy">Копировать</string>
     <string name="reader_copy_description">Копировать выделенный текст</string>
 
