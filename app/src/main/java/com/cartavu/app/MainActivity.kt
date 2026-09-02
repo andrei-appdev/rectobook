@@ -352,6 +352,9 @@ private fun DocumentReader(
     var showOutline by remember { mutableStateOf(false) }
     val outlineListState = rememberLazyListState()
     val outline by viewModel.outline.collectAsState()
+    // Saved rather than merely remembered: turning the screen with the panel
+    // open is the case its fixed proportions exist for.
+    var showSettings by rememberSaveable { mutableStateOf(false) }
 
     // How much of the screen the system bars stand on. Read ignoring whether
     // they are showing, so the reader lays out the same way with a bar hidden
@@ -415,6 +418,7 @@ private fun DocumentReader(
     // the arrow beside it goes to the library.
     BackHandler {
         when {
+            showSettings -> showSettings = false
             selection != null -> viewModel.clearSelection()
             showOutline -> showOutline = false
             showSearch -> showSearch = false
@@ -650,7 +654,8 @@ private fun DocumentReader(
                     // The search panel covers the page; touches on it are the
                     // panel's alone. While text is being picked out the page
                     // belongs to the selection for the same reason.
-                    enabled = !showSearch && !showOutline && selection == null,
+                    enabled = !showSearch && !showOutline && !showSettings &&
+                        selection == null,
                     onZoom = { scale, focus ->
                         gestureFocus = focus
                         gestureScale = (gestureScale * scale)
@@ -662,6 +667,9 @@ private fun DocumentReader(
                         zoomAbout(committed, gestureFocus)
                     },
                     onTap = { point -> followLinkOr(point) { chromeVisible = !chromeVisible } },
+                    // Held and let go without travelling. A hold that travels
+                    // is a selection, and the page below reads it as one.
+                    onLongPress = { showSettings = true },
                 )
                 // A tap puts the selection down, wherever on the reader it
                 // falls - the page it was made on, another page, or the space
@@ -835,6 +843,19 @@ private fun DocumentReader(
                     chromeVisible = true
                     goToPage(hit.page + 1)
                 },
+            )
+        }
+
+        // Last, so it lies over the bars as well as the page. The page is what
+        // it is being set against and stays in view around it; the bars are
+        // only in the way.
+        if (showSettings) {
+            ReaderSettingsPanel(
+                mode = colorMode,
+                contrast = contrast,
+                onModeChange = viewModel::setColorMode,
+                onContrastChange = viewModel::setContrast,
+                onDismiss = { showSettings = false },
             )
         }
     }
@@ -1096,22 +1117,33 @@ private fun PageView(
                 val request = tileRequestFor(coordinates, baseWidth)
                 if (request != tileRequest) tileRequest = request
             }
-            // Press and hold to take a word. The list is still scrollable at
-            // this point, but a press that has not travelled is not a scroll,
-            // so nothing has to be taken from it.
+            // Press, hold and draw over the words to take them. The list is
+            // still scrollable at this point, but a press that has not
+            // travelled is not a scroll, so nothing has to be taken from it.
+            //
+            // The word is taken on the first movement rather than on the hold
+            // itself, which is what leaves a hold that goes nowhere to the
+            // settings panel: the two gestures start alike and are told apart
+            // by whether the finger travels before it lifts.
             .pointerInput(pageNumber) {
+                var start: Offset? = null
                 detectDragGesturesAfterLongPress(
-                    onDragStart = { point ->
-                        val (x, y) = fraction(point, size) ?: return@detectDragGesturesAfterLongPress
-                        scope.launch {
-                            if (viewModel.selectWordAt(pageNumber, x, y)) {
-                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            }
-                        }
-                    },
+                    onDragStart = { point -> start = point },
                     onDrag = { change, _ ->
+                        val began = start
+                        start = null
                         val (x, y) = fraction(change.position, size) ?: return@detectDragGesturesAfterLongPress
-                        scope.launch { viewModel.extendSelectionTo(x, y) }
+                        // One coroutine for both, so the word is always taken
+                        // before the selection is asked to reach past it.
+                        scope.launch {
+                            if (began != null) {
+                                val from = fraction(began, size)
+                                if (from != null && viewModel.selectWordAt(pageNumber, from.first, from.second)) {
+                                    haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                }
+                            }
+                            viewModel.extendSelectionTo(x, y)
+                        }
                     },
                 )
             }
@@ -1385,12 +1417,16 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
  * Reports pinch scale changes and the point they are centred on, without
  * consuming single-pointer drags, so the page list keeps scrolling vertically
  * while pinch still zooms. A press that neither zooms nor travels is reported
- * as a tap, reported with where it landed - the design toggles the chrome on
- * one, and a tap that finds a link follows it instead.
+ * with where it landed - as a long press if it was held past the system's
+ * threshold, otherwise as a tap. The design toggles the chrome on a tap, a tap
+ * that finds a link follows it instead, and a long press opens the settings
+ * panel.
  *
- * The tap is recognised here rather than in a second `pointerInput` so that a
+ * Both are recognised here rather than in a second `pointerInput` so that a
  * pinch, or a scroll that happens to end where it began, cannot also read as
- * one.
+ * one. It is also the only detector that sees the whole reader - the page, the
+ * desk around it, the gaps between pages - so the panel comes up from anywhere
+ * on the screen without a second gesture competing with the list for a press.
  *
  * [enabled] is how a panel laid over the page keeps the page out of its
  * gestures. Nothing else can do it: this reads presses whether or not anything
@@ -1402,6 +1438,7 @@ private fun Modifier.pinchToZoom(
     onZoom: (scale: Float, focus: Offset) -> Unit,
     onEnd: () -> Unit,
     onTap: (Offset) -> Unit,
+    onLongPress: (Offset) -> Unit,
 ): Modifier = pointerInput(enabled) {
     if (!enabled) return@pointerInput
     awaitEachGesture {
@@ -1409,9 +1446,14 @@ private fun Modifier.pinchToZoom(
         var zoomed = false
         var multiTouch = false
         var travel = 0f
+        // How long the press lasted, taken from the events themselves rather
+        // than the clock: a long press is only decided once the finger is up,
+        // so that a hold which turns into a selection drag is never one.
+        var lastTime = down.uptimeMillis
         var hasPointers = true
         while (hasPointers) {
             val event = awaitPointerEvent()
+            lastTime = event.changes.maxOf { it.uptimeMillis }
             if (event.changes.size >= 2) {
                 multiTouch = true
                 val scale = event.calculateZoom()
@@ -1426,9 +1468,13 @@ private fun Modifier.pinchToZoom(
             }
             hasPointers = event.changes.any { it.pressed }
         }
+        val still = !multiTouch && travel < viewConfiguration.touchSlop
         when {
             zoomed -> onEnd()
-            !multiTouch && travel < viewConfiguration.touchSlop -> onTap(down.position)
+            !still -> {}
+            lastTime - down.uptimeMillis >= viewConfiguration.longPressTimeoutMillis ->
+                onLongPress(down.position)
+            else -> onTap(down.position)
         }
     }
 }

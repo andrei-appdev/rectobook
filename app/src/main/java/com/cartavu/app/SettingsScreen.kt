@@ -82,52 +82,78 @@ fun SettingsScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(start = 18.dp, end = 18.dp, top = 20.dp, bottom = 28.dp),
         ) {
-            Text(
-                text = upperStringResource(R.string.settings_color_mode),
-                style = SectionLabel,
-                modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
-            )
-            SegmentedChoice(
-                options = PageColorMode.entries,
-                selected = mode,
-                label = { upperStringResource(it.labelResource) },
-                onSelect = onModeChange,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = upperStringResource(R.string.settings_contrast),
-                    style = SectionLabel,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = if (contrast <= 0f) {
-                        stringResource(R.string.contrast_as_scanned)
-                    } else {
-                        stringResource(R.string.contrast_amount, (contrast * 100).roundToInt())
-                    },
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        letterSpacing = 0.04.em,
-                        fontFeatureSettings = TabularNums,
-                    ),
-                    textAlign = TextAlign.End,
-                )
-            }
-            ValueSlider(
-                value = contrast,
-                label = stringResource(R.string.settings_contrast),
-                onValueChange = onContrastChange,
-                modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            ToneSettings(
+                mode = mode,
+                contrast = contrast,
+                onModeChange = onModeChange,
+                onContrastChange = onContrastChange,
             )
 
             SampleSheet(tone = tone, modifier = Modifier.padding(top = 14.dp))
 
             AboutRow(onClick = onAbout, modifier = Modifier.padding(top = 28.dp))
         }
+    }
+}
+
+/**
+ * The two settings themselves: which way a page is toned, and how far its
+ * levels are stretched.
+ *
+ * Written once and shown twice - here, with a sample sheet drawn to judge them
+ * against, and in the reader's own panel, where the page being read is what
+ * they are judged against. Neither copy can drift from the other.
+ */
+@Composable
+fun ToneSettings(
+    mode: PageColorMode,
+    contrast: Float,
+    onModeChange: (PageColorMode) -> Unit,
+    onContrastChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = upperStringResource(R.string.settings_color_mode),
+            style = SectionLabel,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp),
+        )
+        SegmentedChoice(
+            options = PageColorMode.entries,
+            selected = mode,
+            label = { upperStringResource(it.labelResource) },
+            onSelect = onModeChange,
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 24.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = upperStringResource(R.string.settings_contrast),
+                style = SectionLabel,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = if (contrast <= 0f) {
+                    stringResource(R.string.contrast_as_scanned)
+                } else {
+                    stringResource(R.string.contrast_amount, (contrast * 100).roundToInt())
+                },
+                style = MaterialTheme.typography.labelLarge.copy(
+                    letterSpacing = 0.04.em,
+                    fontFeatureSettings = TabularNums,
+                ),
+                textAlign = TextAlign.End,
+            )
+        }
+        ValueSlider(
+            value = contrast,
+            label = stringResource(R.string.settings_contrast),
+            onValueChange = onContrastChange,
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        )
     }
 }
 
