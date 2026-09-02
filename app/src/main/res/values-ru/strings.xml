@@ -33,6 +33,13 @@
     <string name="color_mode_sepia">Сепия</string>
     <string name="settings_contrast">Контраст</string>
     <string name="contrast_as_scanned">Как в скане</string>
+    <string name="settings_status_bar">Строка состояния</string>
+    <string name="settings_navigation_bar">Кнопки навигации</string>
+    <string name="settings_portrait">Портрет</string>
+    <string name="settings_landscape">Альбом</string>
+    <string name="bar_always">Всегда</string>
+    <string name="bar_with_bars">С панелями</string>
+    <string name="bar_never">Никогда</string>
     <string name="settings_about">О приложении</string>
 
     <!-- File sizes -->

@@ -163,6 +163,15 @@ internal val ChevronRightIcon: Icon24 = { u ->
     moveTo(9 * u, 5 * u); lineTo(16 * u, 12 * u); lineTo(9 * u, 19 * u)
 }
 
+/**
+ * A cross, for the one thing in the app that closes rather than goes back: the
+ * settings panel, which was never a screen you arrived at from anywhere.
+ */
+internal val CloseIcon: Icon24 = { u ->
+    moveTo(6 * u, 6 * u); lineTo(18 * u, 18 * u)
+    moveTo(18 * u, 6 * u); lineTo(6 * u, 18 * u)
+}
+
 /** Draws an [Icon24] as the design does: stroked, 1.5 units wide, unfilled. */
 @Composable
 internal fun StrokeIcon(
@@ -343,6 +352,10 @@ fun ReaderTopBar(
     // Only for documents that carry one. A button that opens an empty screen
     // teaches the reader to stop pressing it.
     onContents: (() -> Unit)? = null,
+    // False when the reader has been told never to show that bar, in which
+    // case the bar has no strip to stand clear of.
+    reserveStatusBar: Boolean = true,
+    reserveNavigationBar: Boolean = true,
 ) {
     Column(
         modifier = modifier
@@ -357,8 +370,14 @@ fun ReaderTopBar(
             // bar's background while the bar is there.
             modifier = Modifier
                 .fillMaxWidth()
-                .clearOfStatusBar()
-                .clearOfNavigationBar(WindowInsetsSides.Horizontal)
+                .then(if (reserveStatusBar) Modifier.clearOfStatusBar() else Modifier)
+                .then(
+                    if (reserveNavigationBar) {
+                        Modifier.clearOfNavigationBar(WindowInsetsSides.Horizontal)
+                    } else {
+                        Modifier
+                    },
+                )
                 // The 36dp mark squares set the bar's height; the padding is
                 // only what keeps them off its rule.
                 .padding(horizontal = 8.dp, vertical = 2.dp),
@@ -400,10 +419,15 @@ fun ReaderBottomBar(
     onPreviousPage: () -> Unit,
     onNextPage: () -> Unit,
     modifier: Modifier = Modifier,
+    // False when the reader has been told never to show the buttons, in which
+    // case there is no strip under this bar for them to stand on.
+    reserveNavigationBar: Boolean = true,
 ) {
-    val navigationStrip = WindowInsets.navigationBarsIgnoringVisibility
-        .asPaddingValues()
-        .calculateBottomPadding()
+    val navigationStrip = if (reserveNavigationBar) {
+        WindowInsets.navigationBarsIgnoringVisibility.asPaddingValues().calculateBottomPadding()
+    } else {
+        0.dp
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -417,7 +441,13 @@ fun ReaderBottomBar(
             // fills it.
             modifier = Modifier
                 .fillMaxWidth()
-                .clearOfNavigationBar(WindowInsetsSides.Horizontal)
+                .then(
+                    if (reserveNavigationBar) {
+                        Modifier.clearOfNavigationBar(WindowInsetsSides.Horizontal)
+                    } else {
+                        Modifier
+                    },
+                )
                 // As on the top bar, the controls set the height. The lower
                 // edge keeps 2dp more than the upper: below it is the strip
                 // the system's own buttons stand on, and they are not this

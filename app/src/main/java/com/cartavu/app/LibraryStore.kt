@@ -125,6 +125,40 @@ class LibraryStore(private val context: Context) {
         }
     }
 
+    /**
+     * What the reader does with the system bars, kept here for the same reason
+     * the tone is: it is how someone reads rather than something about one
+     * document.
+     *
+     * Each of the four is guarded on its own, and falls back to the default
+     * that rule was shipped with rather than to a fixed one - a name an older
+     * or newer build wrote is not a reason to hand back a reader nobody asked
+     * for.
+     */
+    val systemBarRules: Flow<SystemBarRules> =
+        context.libraryDataStore.data.map { preferences ->
+            val defaults = SystemBarRules()
+            fun read(key: Preferences.Key<String>, fallback: BarVisibility) =
+                runCatching { BarVisibility.valueOf(preferences[key] ?: "") }
+                    .getOrDefault(fallback)
+
+            SystemBarRules(
+                statusPortrait = read(STATUS_PORTRAIT_KEY, defaults.statusPortrait),
+                statusLandscape = read(STATUS_LANDSCAPE_KEY, defaults.statusLandscape),
+                navigationPortrait = read(NAV_PORTRAIT_KEY, defaults.navigationPortrait),
+                navigationLandscape = read(NAV_LANDSCAPE_KEY, defaults.navigationLandscape),
+            )
+        }
+
+    suspend fun saveSystemBarRules(rules: SystemBarRules) {
+        context.libraryDataStore.edit { preferences ->
+            preferences[STATUS_PORTRAIT_KEY] = rules.statusPortrait.name
+            preferences[STATUS_LANDSCAPE_KEY] = rules.statusLandscape.name
+            preferences[NAV_PORTRAIT_KEY] = rules.navigationPortrait.name
+            preferences[NAV_LANDSCAPE_KEY] = rules.navigationLandscape.name
+        }
+    }
+
     private fun decode(raw: String?): List<RecentDocument> {
         if (raw.isNullOrBlank()) return emptyList()
         return runCatching {
@@ -172,6 +206,10 @@ class LibraryStore(private val context: Context) {
         private val RECENTS_KEY = stringPreferencesKey("recents")
         private val CONTRAST_KEY = floatPreferencesKey("contrast")
         private val COLOR_MODE_KEY = stringPreferencesKey("color_mode")
+        private val STATUS_PORTRAIT_KEY = stringPreferencesKey("status_bar_portrait")
+        private val STATUS_LANDSCAPE_KEY = stringPreferencesKey("status_bar_landscape")
+        private val NAV_PORTRAIT_KEY = stringPreferencesKey("nav_bar_portrait")
+        private val NAV_LANDSCAPE_KEY = stringPreferencesKey("nav_bar_landscape")
         private const val MAX_RECENTS = 20
     }
 }

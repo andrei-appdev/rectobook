@@ -259,6 +259,7 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
             val recents by viewModel.recents.collectAsState()
             val contrast by viewModel.contrast.collectAsState()
             val colorMode by viewModel.colorMode.collectAsState()
+            val barRules by viewModel.systemBarRules.collectAsState()
             // Kept here rather than inside the library so they survive that
             // screen's own scrolling and recomposition, and so back can be
             // wired to them.
@@ -282,8 +283,10 @@ fun ReaderScreen(initialUri: Uri?, viewModel: ReaderViewModel = viewModel()) {
                 SettingsScreen(
                     mode = colorMode,
                     contrast = contrast,
+                    systemBarRules = barRules,
                     onModeChange = viewModel::setColorMode,
                     onContrastChange = viewModel::setContrast,
+                    onSystemBarRulesChange = viewModel::setSystemBarRules,
                     onAbout = { showAbout = true },
                     onBack = { showSettings = false },
                 )
@@ -356,21 +359,34 @@ private fun DocumentReader(
     // open is the case its fixed proportions exist for.
     var showSettings by rememberSaveable { mutableStateOf(false) }
 
-    // How much of the screen the system bars stand on. Read ignoring whether
-    // they are showing, so the reader lays out the same way with a bar hidden
-    // and the page behind it does not have to be re-rendered.
-    val navigationStrip = WindowInsets.navigationBarsIgnoringVisibility
-        .asPaddingValues()
-        .calculateBottomPadding()
-    val statusStrip = WindowInsets.statusBarsIgnoringVisibility
-        .asPaddingValues()
-        .calculateTopPadding()
-
-    // In portrait the status bar stays whatever the chrome does, so the page
-    // starts below it. In landscape it goes with the chrome, and the page has
-    // the whole height of the screen with the clock over it while it is there.
     val portrait =
         LocalConfiguration.current.orientation != Configuration.ORIENTATION_LANDSCAPE
+
+    // Which bars this reader is willing to show at all, in the orientation it
+    // is being held in.
+    val barRules by viewModel.systemBarRules.collectAsState()
+    val statusRule = barRules.status(portrait)
+    val navigationRule = barRules.navigation(portrait)
+
+    // A bar the reader will never show is a bar it must not keep room for
+    // either, or the page is read beside an empty strip. Everything else is
+    // reserved whether or not the bar is on screen at that moment, so the
+    // layout does not move as one comes and goes and the page behind it does
+    // not have to be re-rendered - a rule holds for as long as the setting
+    // does, which is what lets this stay a layout decision rather than a
+    // live one.
+    val reserveStatus = statusRule != BarVisibility.NEVER
+    val reserveNavigation = navigationRule != BarVisibility.NEVER
+    val navigationStrip = if (reserveNavigation) {
+        WindowInsets.navigationBarsIgnoringVisibility.asPaddingValues().calculateBottomPadding()
+    } else {
+        0.dp
+    }
+    val statusStrip = if (reserveStatus) {
+        WindowInsets.statusBarsIgnoringVisibility.asPaddingValues().calculateTopPadding()
+    } else {
+        0.dp
+    }
 
     // The design's chrome is transient: it starts visible and a tap on the page
     // takes it away, so a document can be read edge to edge.
@@ -381,10 +397,16 @@ private fun DocumentReader(
         label = "chrome",
     )
 
-    // The system bars go with the reader's own, so one tap clears everything
-    // off the page. Search is a screen in its own right rather than a page to
-    // read, so it always gets them back.
-    SystemBars(visible = chromeVisible || showSearch || showOutline)
+    // Search and the contents are screens in their own right rather than pages
+    // to read, so a bar that goes with the reader's own comes back for them.
+    val chromeShown = chromeVisible || showSearch || showOutline
+    fun BarVisibility.holds(): Boolean = when (this) {
+        BarVisibility.ALWAYS -> true
+        BarVisibility.WITH_BARS -> chromeShown
+        BarVisibility.NEVER -> false
+    }
+
+    SystemBars(status = statusRule.holds(), navigation = navigationRule.holds())
 
     val selection by viewModel.selection.collectAsState()
     val clipboard = LocalClipboardManager.current
@@ -641,7 +663,9 @@ private fun DocumentReader(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (portrait) Modifier.clearOfStatusBar() else Modifier)
+                .then(
+                    if (portrait && reserveStatus) Modifier.clearOfStatusBar() else Modifier,
+                )
                 // The design lays the pages on a tone darker than the app
                 // background, so a white page reads as paper on a desk. A toned
                 // page brings its own desk: a black sheet on a light grey one
@@ -786,6 +810,8 @@ private fun DocumentReader(
                 }
             },
             modifier = Modifier.align(Alignment.TopCenter),
+            reserveStatusBar = reserveStatus,
+            reserveNavigationBar = reserveNavigation,
         )
 
         ReaderBottomBar(
@@ -799,6 +825,7 @@ private fun DocumentReader(
             onPreviousPage = { goToPage(currentPage - 1) },
             onNextPage = { goToPage(currentPage + 1) },
             modifier = Modifier.align(Alignment.BottomCenter),
+            reserveNavigationBar = reserveNavigation,
         )
 
         if (showOutline) {
@@ -853,8 +880,10 @@ private fun DocumentReader(
             ReaderSettingsPanel(
                 mode = colorMode,
                 contrast = contrast,
+                systemBarRules = barRules,
                 onModeChange = viewModel::setColorMode,
                 onContrastChange = viewModel::setContrast,
+                onSystemBarRulesChange = viewModel::setSystemBarRules,
                 onDismiss = { showSettings = false },
             )
         }
@@ -1360,13 +1389,12 @@ private fun selectionEnds(rects: List<PageRect>, size: IntSize): List<Offset>? {
 }
 
 /**
- * Shows or hides the system bars along with the reader's own chrome.
+ * Puts each system bar where the caller says.
  *
- * The navigation bar goes in both orientations - it is buttons the reader is
- * not using while reading. The status bar only goes in landscape, where the
- * page is short of height and the clock costs a visible slice of it; in
- * portrait it stays, because there the page is short of width instead and
- * hiding a bar above it buys nothing.
+ * Which bar is up when used to be decided here, by orientation. It is four
+ * settings now ([SystemBarRules]); this only carries them out, and takes the
+ * two independently because that is the whole of what the settings can ask
+ * for.
  *
  * `BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE` keeps the bars reachable while they
  * are hidden: a swipe from an edge brings them back for a moment, so the clock
@@ -1377,24 +1405,19 @@ private fun selectionEnds(rects: List<PageRect>, size: IntSize): List<Offset>? {
  * the user to the library screen.
  */
 @Composable
-private fun SystemBars(visible: Boolean) {
+private fun SystemBars(status: Boolean, navigation: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
     val window = view.context.findActivity()?.window ?: return
-    val landscape =
-        LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    LaunchedEffect(visible, landscape) {
+    LaunchedEffect(status, navigation) {
         WindowCompat.getInsetsController(window, view).apply {
             systemBarsBehavior =
                 WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            if (visible) {
-                show(WindowInsetsCompat.Type.systemBars())
-            } else {
-                hide(WindowInsetsCompat.Type.navigationBars())
-                if (landscape) hide(WindowInsetsCompat.Type.statusBars())
-                else show(WindowInsetsCompat.Type.statusBars())
-            }
+            if (status) show(WindowInsetsCompat.Type.statusBars())
+            else hide(WindowInsetsCompat.Type.statusBars())
+            if (navigation) show(WindowInsetsCompat.Type.navigationBars())
+            else hide(WindowInsetsCompat.Type.navigationBars())
         }
     }
 

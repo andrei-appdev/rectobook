@@ -33,6 +33,13 @@
     <string name="color_mode_sepia">Sepia</string>
     <string name="settings_contrast">Contraste</string>
     <string name="contrast_as_scanned">Sin ajustar</string>
+    <string name="settings_status_bar">Barra de estado</string>
+    <string name="settings_navigation_bar">Barra de navegación</string>
+    <string name="settings_portrait">Vertical</string>
+    <string name="settings_landscape">Horizontal</string>
+    <string name="bar_always">Siempre</string>
+    <string name="bar_with_bars">Con barras</string>
+    <string name="bar_never">Nunca</string>
     <string name="settings_about">Acerca de la aplicación</string>
 
     <!-- File sizes. The units happen to be the English ones; the string is

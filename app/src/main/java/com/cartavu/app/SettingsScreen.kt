@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.em
 import com.cartavu.app.ui.theme.IndustryBackground
 import com.cartavu.app.ui.theme.IndustryDivider
 import com.cartavu.app.ui.theme.IndustryNeutral200
+import com.cartavu.app.ui.theme.IndustryText
 import com.cartavu.app.ui.theme.SectionLabel
 import com.cartavu.app.ui.theme.TabularNums
 import kotlin.math.roundToInt
@@ -48,8 +49,10 @@ import kotlin.math.roundToInt
 fun SettingsScreen(
     mode: PageColorMode,
     contrast: Float,
+    systemBarRules: SystemBarRules,
     onModeChange: (PageColorMode) -> Unit,
     onContrastChange: (Float) -> Unit,
+    onSystemBarRulesChange: (SystemBarRules) -> Unit,
     onAbout: () -> Unit,
     onBack: () -> Unit,
 ) {
@@ -90,6 +93,12 @@ fun SettingsScreen(
             )
 
             SampleSheet(tone = tone, modifier = Modifier.padding(top = 14.dp))
+
+            SystemBarSettings(
+                rules = systemBarRules,
+                onChange = onSystemBarRulesChange,
+                modifier = Modifier.padding(top = 24.dp),
+            )
 
             AboutRow(onClick = onAbout, modifier = Modifier.padding(top = 28.dp))
         }
@@ -153,6 +162,95 @@ fun ToneSettings(
             label = stringResource(R.string.settings_contrast),
             onValueChange = onContrastChange,
             modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+        )
+    }
+}
+
+/**
+ * What the reader does with the system bars: two bars, each in two
+ * orientations.
+ *
+ * Four choices rather than one switch, because the two bars are not alike -
+ * one carries the clock, the other the way out of the app - and because a
+ * phone held one way up is not the same reading surface as the other. Laid out
+ * as the design lays out a group: one section label over rows that name only
+ * what tells them apart.
+ */
+@Composable
+fun SystemBarSettings(
+    rules: SystemBarRules,
+    onChange: (SystemBarRules) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        BarGroup(
+            title = upperStringResource(R.string.settings_status_bar),
+            portrait = rules.statusPortrait,
+            landscape = rules.statusLandscape,
+            onPortrait = { onChange(rules.copy(statusPortrait = it)) },
+            onLandscape = { onChange(rules.copy(statusLandscape = it)) },
+        )
+        BarGroup(
+            title = upperStringResource(R.string.settings_navigation_bar),
+            portrait = rules.navigationPortrait,
+            landscape = rules.navigationLandscape,
+            onPortrait = { onChange(rules.copy(navigationPortrait = it)) },
+            onLandscape = { onChange(rules.copy(navigationLandscape = it)) },
+            modifier = Modifier.padding(top = 20.dp),
+        )
+    }
+}
+
+@Composable
+private fun BarGroup(
+    title: String,
+    portrait: BarVisibility,
+    landscape: BarVisibility,
+    onPortrait: (BarVisibility) -> Unit,
+    onLandscape: (BarVisibility) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = title,
+            style = SectionLabel,
+            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        )
+        BarRow(upperStringResource(R.string.settings_portrait), portrait, onPortrait)
+        BarRow(
+            upperStringResource(R.string.settings_landscape),
+            landscape,
+            onLandscape,
+            modifier = Modifier.padding(top = 10.dp),
+        )
+    }
+}
+
+/**
+ * One orientation's choice. The orientation is named above the segment rather
+ * than beside it: three options need the whole width to stay words rather than
+ * ellipses, in the reader's panel most of all.
+ */
+@Composable
+private fun BarRow(
+    label: String,
+    value: BarVisibility,
+    onSelect: (BarVisibility) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = IndustryText.copy(alpha = 0.6f),
+            modifier = Modifier.padding(bottom = 4.dp),
+        )
+        SegmentedChoice(
+            options = BarVisibility.entries,
+            selected = value,
+            label = { upperStringResource(it.labelResource) },
+            onSelect = onSelect,
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -228,6 +326,13 @@ private fun AboutRow(onClick: () -> Unit, modifier: Modifier = Modifier) {
         StrokeIcon(ForwardIcon, size = 17.dp)
     }
 }
+
+private val BarVisibility.labelResource: Int
+    get() = when (this) {
+        BarVisibility.ALWAYS -> R.string.bar_always
+        BarVisibility.WITH_BARS -> R.string.bar_with_bars
+        BarVisibility.NEVER -> R.string.bar_never
+    }
 
 private val PageColorMode.labelResource: Int
     get() = when (this) {

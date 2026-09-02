@@ -30,6 +30,15 @@
     <string name="settings_contrast">Contrast</string>
     <string name="contrast_as_scanned">As scanned</string>
     <string name="contrast_amount" translatable="false">%1$d%%</string>
+    <string name="settings_status_bar">Status bar</string>
+    <string name="settings_navigation_bar">Navigation bar</string>
+    <string name="settings_portrait">Portrait</string>
+    <string name="settings_landscape">Landscape</string>
+    <!-- When a system bar is on screen. "With bars" means with the reader's
+         own top and bottom bars, which a tap on the page takes away. -->
+    <string name="bar_always">Always</string>
+    <string name="bar_with_bars">With bars</string>
+    <string name="bar_never">Never</string>
     <string name="settings_about">About this app</string>
 
     <!-- File sizes. The unit is part of the string: it is not "MB" everywhere. -->

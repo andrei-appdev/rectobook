@@ -137,9 +137,14 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     private val _colorMode = MutableStateFlow(PageColorMode.NORMAL)
     val colorMode: StateFlow<PageColorMode> = _colorMode.asStateFlow()
 
+    /** What the reader does with the system bars. Held the same way again. */
+    private val _systemBarRules = MutableStateFlow(SystemBarRules())
+    val systemBarRules: StateFlow<SystemBarRules> = _systemBarRules.asStateFlow()
+
     init {
         viewModelScope.launch { _contrast.value = library.contrast.first() }
         viewModelScope.launch { _colorMode.value = library.colorMode.first() }
+        viewModelScope.launch { _systemBarRules.value = library.systemBarRules.first() }
     }
 
     fun setContrast(value: Float) {
@@ -153,6 +158,12 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
         if (mode == _colorMode.value) return
         _colorMode.value = mode
         viewModelScope.launch { library.saveColorMode(mode) }
+    }
+
+    fun setSystemBarRules(rules: SystemBarRules) {
+        if (rules == _systemBarRules.value) return
+        _systemBarRules.value = rules
+        viewModelScope.launch { library.saveSystemBarRules(rules) }
     }
 
     val recents: StateFlow<List<RecentDocument>> = library.recents.stateIn(

@@ -4,10 +4,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -49,8 +52,10 @@ private const val PANEL_BOTTOM = 0.15f
 fun ReaderSettingsPanel(
     mode: PageColorMode,
     contrast: Float,
+    systemBarRules: SystemBarRules,
     onModeChange: (PageColorMode) -> Unit,
     onContrastChange: (Float) -> Unit,
+    onSystemBarRulesChange: (SystemBarRules) -> Unit,
     onDismiss: () -> Unit,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -91,13 +96,36 @@ fun ReaderSettingsPanel(
                         onClick = {},
                     )
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 18.dp, vertical = 16.dp),
+                    .padding(start = 18.dp, end = 12.dp, top = 6.dp, bottom = 16.dp),
             ) {
+                // The panel is opened by a gesture and closed by another - a
+                // tap outside it, or back. Neither is on screen, so the mark
+                // is: a panel you have to guess your way out of is one you
+                // stop opening.
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    IconAction(
+                        CloseIcon,
+                        stringResource(R.string.settings_close),
+                        onDismiss,
+                        size = 16.dp,
+                    )
+                }
+
                 ToneSettings(
                     mode = mode,
                     contrast = contrast,
                     onModeChange = onModeChange,
                     onContrastChange = onContrastChange,
+                    modifier = Modifier.padding(end = 6.dp),
+                )
+
+                SystemBarSettings(
+                    rules = systemBarRules,
+                    onChange = onSystemBarRulesChange,
+                    modifier = Modifier.padding(top = 22.dp, end = 6.dp),
                 )
             }
         }
