@@ -403,10 +403,12 @@ fun ReaderTopBar(
  * Reader bottom bar: where in the document you are, and the two ways of
  * getting somewhere else.
  *
- * Two lines rather than one. The counter is a line of its own, centred over
- * the slider it names, and the slider gets the whole width beneath it with a
- * step arrow at each end. Zoom is not here at all: a pinch already does it,
- * and the segment that repeated it was taking the width the slider wanted.
+ * Two lines rather than one, and the two ways of getting somewhere are one to
+ * a line. The arrows step from the page the counter names, so they stand
+ * either side of it and the three read as one control. The slider travels the
+ * whole document, and gets a line to travel across. Zoom is not here at all: a
+ * pinch already does it, and the segment that repeated it was taking the width
+ * the slider wanted.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -448,50 +450,41 @@ fun ReaderBottomBar(
                         Modifier
                     },
                 )
-                // As on the top bar, the controls set the height. The lower
-                // edge keeps 2dp more than the upper: below it is the strip
-                // the system's own buttons stand on, and they are not this
-                // bar's controls.
-                .padding(start = 12.dp, end = 12.dp, top = 2.dp, bottom = 4.dp),
+                // As on the top bar, the controls set the height - and it is
+                // the arrows that set it now, being taller than the digits
+                // they stand beside, so the upper edge adds nothing of its
+                // own. The lower keeps 4dp: below it is the strip the system's
+                // own buttons stand on, and they are not this bar's controls.
+                .padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // A label that happens to be pressable rather than a button: it
-            // says where the document is open, which is not a thing to be
-            // operated, and a bordered block over the slider read as a second
-            // control competing with it. The padding is what makes the digits
-            // worth aiming at.
-            Text(
-                text = stringResource(R.string.reader_page_of, currentPage, pageCount),
-                style = MaterialTheme.typography.labelLarge.copy(
-                    letterSpacing = 0.04.em,
-                    fontFeatureSettings = TabularNums,
-                ),
-                modifier = Modifier
-                    .clickable(
-                        onClickLabel = stringResource(R.string.reader_go_to_page),
-                        onClick = onGoToPage,
-                    )
-                    .padding(horizontal = 14.dp, vertical = 5.dp),
-            )
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                // The arrows are fixed and the slider takes what is left, so
-                // the three of them are one screen wide at any width.
+            // The row is only as wide as the three controls on it, and the
+            // column centres it. The gaps between them are the counter's own
+            // padding, so the digits keep the same room to be aimed at that
+            // they had when they stood alone.
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 StepButton(
                     ChevronLeftIcon,
                     stringResource(R.string.reader_previous_page),
                     enabled = currentPage > 1,
                     onClick = onPreviousPage,
                 )
-                PageSlider(
-                    currentPage = currentPage,
-                    pageCount = pageCount,
-                    onSeek = onSeekToPage,
-                    modifier = Modifier.weight(1f),
+                // A label that happens to be pressable rather than a button:
+                // it says where the document is open, which is not a thing to
+                // be operated, and a bordered block between the arrows would
+                // read as a third one of them.
+                Text(
+                    text = stringResource(R.string.reader_page_of, currentPage, pageCount),
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        letterSpacing = 0.04.em,
+                        fontFeatureSettings = TabularNums,
+                    ),
+                    modifier = Modifier
+                        .clickable(
+                            onClickLabel = stringResource(R.string.reader_go_to_page),
+                            onClick = onGoToPage,
+                        )
+                        .padding(horizontal = 14.dp, vertical = 5.dp),
                 )
                 StepButton(
                     ChevronRightIcon,
@@ -500,6 +493,16 @@ fun ReaderBottomBar(
                     onClick = onNextPage,
                 )
             }
+
+            // The whole width, now that nothing shares the line with it. A
+            // document of any length is a thumb's travel across the screen,
+            // and every page in it is that travel divided by the count.
+            PageSlider(
+                currentPage = currentPage,
+                pageCount = pageCount,
+                onSeek = onSeekToPage,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
 
         // The strip the navigation buttons stand on, painted solid. The bar

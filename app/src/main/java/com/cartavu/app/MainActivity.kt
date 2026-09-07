@@ -115,6 +115,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 
 /** Zoom is expressed as a multiple of fit-to-width. */
 private const val MIN_ZOOM = 1f
@@ -691,9 +692,10 @@ private fun DocumentReader(
                         zoomAbout(committed, gestureFocus)
                     },
                     onTap = { point -> followLinkOr(point) { chromeVisible = !chromeVisible } },
-                    // Held and let go without travelling. A hold that travels
+                    // Two taps in the time the system allows between them. A
+                    // hold is not this gesture any more: a hold that travels
                     // is a selection, and the page below reads it as one.
-                    onLongPress = { showSettings = true },
+                    onDoubleTap = { showSettings = true },
                 )
                 // A tap puts the selection down, wherever on the reader it
                 // falls - the page it was made on, another page, or the space
@@ -1439,17 +1441,18 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 /**
  * Reports pinch scale changes and the point they are centred on, without
  * consuming single-pointer drags, so the page list keeps scrolling vertically
- * while pinch still zooms. A press that neither zooms nor travels is reported
- * with where it landed - as a long press if it was held past the system's
- * threshold, otherwise as a tap. The design toggles the chrome on a tap, a tap
- * that finds a link follows it instead, and a long press opens the settings
- * panel.
+ * while pinch still zooms. A press that neither zooms nor travels nor is held
+ * is reported with where it landed - as a double tap if a second one followed
+ * it inside the system's window, otherwise as a tap. The design toggles the
+ * chrome on a tap, a tap that finds a link follows it instead, and a double
+ * tap opens the settings panel.
  *
- * Both are recognised here rather than in a second `pointerInput` so that a
- * pinch, or a scroll that happens to end where it began, cannot also read as
- * one. It is also the only detector that sees the whole reader - the page, the
- * desk around it, the gaps between pages - so the panel comes up from anywhere
- * on the screen without a second gesture competing with the list for a press.
+ * All of them are recognised here rather than in a second `pointerInput` so
+ * that a pinch, or a scroll that happens to end where it began, cannot also
+ * read as one. It is also the only detector that sees the whole reader - the
+ * page, the desk around it, the gaps between pages - so the panel comes up
+ * from anywhere on the screen without a second gesture competing with the list
+ * for a press.
  *
  * [enabled] is how a panel laid over the page keeps the page out of its
  * gestures. Nothing else can do it: this reads presses whether or not anything
@@ -1461,43 +1464,73 @@ private fun Modifier.pinchToZoom(
     onZoom: (scale: Float, focus: Offset) -> Unit,
     onEnd: () -> Unit,
     onTap: (Offset) -> Unit,
-    onLongPress: (Offset) -> Unit,
+    onDoubleTap: (Offset) -> Unit,
 ): Modifier = pointerInput(enabled) {
     if (!enabled) return@pointerInput
     awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        var zoomed = false
-        var multiTouch = false
-        var travel = 0f
-        // How long the press lasted, taken from the events themselves rather
-        // than the clock: a long press is only decided once the finger is up,
-        // so that a hold which turns into a selection drag is never one.
-        var lastTime = down.uptimeMillis
-        var hasPointers = true
-        while (hasPointers) {
-            val event = awaitPointerEvent()
-            lastTime = event.changes.maxOf { it.uptimeMillis }
-            if (event.changes.size >= 2) {
-                multiTouch = true
-                val scale = event.calculateZoom()
-                val focus = event.calculateCentroid()
-                if (scale != 1f && focus != Offset.Unspecified) {
-                    onZoom(scale, focus)
-                    zoomed = true
-                    event.changes.forEach { it.consume() }
+        var down = awaitFirstDown(requireUnconsumed = false)
+        // Where a tap landed that is waiting to hear whether a second one
+        // follows it. Null until a first tap has been let go.
+        var pending: Offset? = null
+        while (true) {
+            var zoomed = false
+            var multiTouch = false
+            var travel = 0f
+            // How long the press lasted, taken from the events themselves
+            // rather than the clock: a hold is only decided once the finger is
+            // up, so that one which turns into a selection drag is never one.
+            var lastTime = down.uptimeMillis
+            var hasPointers = true
+            while (hasPointers) {
+                val event = awaitPointerEvent()
+                lastTime = event.changes.maxOf { it.uptimeMillis }
+                if (event.changes.size >= 2) {
+                    multiTouch = true
+                    val scale = event.calculateZoom()
+                    val focus = event.calculateCentroid()
+                    if (scale != 1f && focus != Offset.Unspecified) {
+                        onZoom(scale, focus)
+                        zoomed = true
+                        event.changes.forEach { it.consume() }
+                    }
+                } else {
+                    event.changes.forEach { travel += (it.position - it.previousPosition).getDistance() }
                 }
-            } else {
-                event.changes.forEach { travel += (it.position - it.previousPosition).getDistance() }
+                hasPointers = event.changes.any { it.pressed }
             }
-            hasPointers = event.changes.any { it.pressed }
-        }
-        val still = !multiTouch && travel < viewConfiguration.touchSlop
-        when {
-            zoomed -> onEnd()
-            !still -> {}
-            lastTime - down.uptimeMillis >= viewConfiguration.longPressTimeoutMillis ->
-                onLongPress(down.position)
-            else -> onTap(down.position)
+            if (zoomed) {
+                onEnd()
+                return@awaitEachGesture
+            }
+            // Neither a tap nor half of a double one: it travelled, or it was
+            // held - and a hold that stays put is the page's own word
+            // selection, which is why nothing at all is reported for it. A
+            // first tap still waiting is given up along with it.
+            val still = !multiTouch && travel < viewConfiguration.touchSlop
+            val held = lastTime - down.uptimeMillis >= viewConfiguration.longPressTimeoutMillis
+            if (!still || held) return@awaitEachGesture
+
+            val first = pending
+            if (first != null) {
+                onDoubleTap(first)
+                return@awaitEachGesture
+            }
+            pending = down.position
+
+            // The single tap is held back until the window for a second one
+            // closes, so that a double tap never toggles the chrome on its way
+            // to the panel. A press that lands inside the window goes round
+            // this same loop, so a tap followed straight away by a drag or a
+            // pinch is still read as that drag or pinch - which is what a
+            // second detector bolted on beside this one could not do.
+            val next = withTimeoutOrNull(viewConfiguration.doubleTapTimeoutMillis) {
+                awaitFirstDown(requireUnconsumed = false)
+            }
+            if (next == null) {
+                onTap(down.position)
+                return@awaitEachGesture
+            }
+            down = next
         }
     }
 }

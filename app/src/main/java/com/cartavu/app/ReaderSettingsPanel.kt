@@ -26,13 +26,15 @@ import com.cartavu.app.ui.theme.IndustryDivider
  * How much of the screen the panel leaves around itself, on each side.
  *
  * Fractions rather than sizes, and the same fractions in both orientations:
- * the panel is 70% of the screen across and 45% of it down wherever it is
- * drawn, which is what keeps it the same object when the screen turns. It sits
- * low because the tone is judged on the page above it - a panel in the middle
- * would cover the part of the page being looked at.
+ * the panel is 84% of the screen across and 62% of it down wherever it is
+ * drawn, which is what keeps it the same object when the screen turns. What it
+ * grows into is the room above it: the gap below is what holds it off the
+ * bottom bar, and it still sits low, because the tone is judged on the page
+ * over it - a panel in the middle would cover the part of the page being
+ * looked at.
  */
-private const val PANEL_SIDE = 0.15f
-private const val PANEL_TOP = 0.40f
+private const val PANEL_SIDE = 0.08f
+private const val PANEL_TOP = 0.23f
 private const val PANEL_BOTTOM = 0.15f
 
 /**
@@ -94,16 +96,16 @@ fun ReaderSettingsPanel(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = {},
-                    )
-                    .verticalScroll(rememberScrollState())
-                    .padding(start = 18.dp, end = 12.dp, top = 6.dp, bottom = 16.dp),
+                    ),
             ) {
-                // The panel is opened by a gesture and closed by another - a
+                // The panel is opened by a gesture and closed by two more - a
                 // tap outside it, or back. Neither is on screen, so the mark
                 // is: a panel you have to guess your way out of is one you
-                // stop opening.
+                // stop opening. It is outside the scrolling column below for
+                // the same reason - a way out that scrolls off the top is one
+                // more thing to guess at from the bottom of the settings.
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp, end = 12.dp),
                     horizontalArrangement = Arrangement.End,
                 ) {
                     IconAction(
@@ -114,19 +116,27 @@ fun ReaderSettingsPanel(
                     )
                 }
 
-                ToneSettings(
-                    mode = mode,
-                    contrast = contrast,
-                    onModeChange = onModeChange,
-                    onContrastChange = onContrastChange,
-                    modifier = Modifier.padding(end = 6.dp),
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState())
+                        .padding(start = 18.dp, end = 12.dp, bottom = 16.dp),
+                ) {
+                    ToneSettings(
+                        mode = mode,
+                        contrast = contrast,
+                        onModeChange = onModeChange,
+                        onContrastChange = onContrastChange,
+                        modifier = Modifier.padding(end = 6.dp),
+                    )
 
-                SystemBarSettings(
-                    rules = systemBarRules,
-                    onChange = onSystemBarRulesChange,
-                    modifier = Modifier.padding(top = 22.dp, end = 6.dp),
-                )
+                    SystemBarSettings(
+                        rules = systemBarRules,
+                        onChange = onSystemBarRulesChange,
+                        modifier = Modifier.padding(top = 22.dp, end = 6.dp),
+                    )
+                }
             }
         }
     }
