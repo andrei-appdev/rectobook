@@ -130,5 +130,7 @@ string in a Preferences DataStore, keyed by the persisted content URI.
   shipping a build obliges offering the source of the whole app.
 - `store/` — artwork for the Play listing. `play-icon-512.png` is the launcher
   mark rendered off the same geometry as `res/drawable/ic_launcher_foreground.xml`,
-  at the full 108dp canvas rather than the crop a launcher mask shows.
+  cropped to the centre 72dp a launcher mask leaves visible — Play rounds the
+  corners itself. The legacy `mipmap-*dpi` PNGs are the same crop; there is no
+  committed render script, so regenerate them together if the mark changes.
 - `/reviews` is gitignored — design/QA review runs with their screenshots.
