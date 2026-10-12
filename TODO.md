@@ -5,6 +5,11 @@
 
 - multilanguage support?
 
+- [ ] **The launcher mark is still CartaVu's C.** The app is Rectobook now;
+      `ic_launcher_foreground.xml` wants an R (Fira Sans Condensed SemiBold
+      outline, rule placed for a letter with no aperture), and
+      `store/play-icon-512.png` re-rendered off the same geometry.
+
 ## PDF, left over from the first pass
 
 - [ ] **Password-protected files** are reported and refused, not prompted for.

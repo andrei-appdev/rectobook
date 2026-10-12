@@ -5,12 +5,12 @@ plugins {
 }
 
 android {
-    namespace = "com.cartavu.app"
+    namespace = "com.rectobook.app"
     compileSdk = 35
     ndkVersion = "27.3.13750724"
 
     defaultConfig {
-        applicationId = "com.cartavu.app"
+        applicationId = "com.rectobook.app"
         minSdk = 24
         targetSdk = 35
         versionCode = 1

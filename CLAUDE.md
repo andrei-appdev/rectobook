@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-An Android DjVu + PDF reader (`com.cartavu.app`), Kotlin + Jetpack Compose,
+An Android DjVu + PDF reader (`com.rectobook.app`), Kotlin + Jetpack Compose,
 with DjVuLibre vendored as C++ under `app/src/main/cpp/djvulibre` and reached
 through a hand-written JNI layer. PDF goes through the prebuilt
 `io.legere:pdfiumandroid` AAR instead — PDFium builds via GN/depot_tools, which

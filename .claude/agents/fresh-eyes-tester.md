@@ -51,7 +51,7 @@ Then install and launch:
 
 ```bash
 JAVA_HOME="C:/Users/Andrei/jdk21/jdk-21.0.12+8" ./gradlew :app:installDebug
-adb shell am start -n com.djvureader.app/.MainActivity
+adb shell am start -n com.rectobook.app/.MainActivity
 ```
 
 Drive it and look at it:

@@ -1,9 +1,9 @@
 ---
 name: run-on-emulator
-description: Build, install, launch and screenshot the DjVu Reader app on the Android emulator. Use whenever verifying a change on a device, taking screenshots of a screen, or driving the UI with adb - it carries the JDK, path and shell quirks that this project's toolchain needs.
+description: Build, install, launch and screenshot the Rectobook app on the Android emulator. Use whenever verifying a change on a device, taking screenshots of a screen, or driving the UI with adb - it carries the JDK, path and shell quirks that this project's toolchain needs.
 ---
 
-# Running DjVu Reader on the emulator
+# Running Rectobook on the emulator
 
 Everything below is verified on this machine. The two things that waste the
 most time if unknown are the JDK (the obvious one fails) and which shell can
@@ -18,7 +18,7 @@ capture a screenshot (PowerShell corrupts it).
 | emulator | `%LOCALAPPDATA%\Android\Sdk\emulator\emulator.exe` |
 | AVD | `djvu_test` (usually already running as `emulator-5554`) |
 | APK | `app\build\outputs\apk\debug\app-debug.apk` |
-| Activity | `com.cartavu.app/.MainActivity` |
+| Activity | `com.rectobook.app/.MainActivity` |
 
 ## Build
 
@@ -71,8 +71,8 @@ Force-stop before relaunching, or the running process stays up and the new
 code never loads:
 
 ```bash
-./adb.exe shell am force-stop com.cartavu.app
-./adb.exe shell am start -n com.cartavu.app/.MainActivity
+./adb.exe shell am force-stop com.rectobook.app
+./adb.exe shell am start -n com.rectobook.app/.MainActivity
 ```
 
 If no device is listed by `adb devices`, start the AVD in the background:
@@ -128,7 +128,7 @@ says:
 ```bash
 ./adb.exe logcat -c                                   # clear, then reproduce
 ./adb.exe logcat -d -s AndroidRuntime:E CRASH:E
-./adb.exe logcat -d --pid=$(./adb.exe shell pidof com.cartavu.app)
+./adb.exe logcat -d --pid=$(./adb.exe shell pidof com.rectobook.app)
 ```
 
 To trace something, add a temporary `android.util.Log` call and filter on its

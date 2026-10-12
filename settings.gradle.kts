@@ -14,5 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "CartaVu"
+rootProject.name = "Rectobook"
 include(":app")

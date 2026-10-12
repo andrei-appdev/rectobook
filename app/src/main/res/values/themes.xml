@@ -4,7 +4,7 @@
       frame, and for the system bars, which the app draws its own content
       under - so both are cleared here and coloured by whatever is behind them.
     -->
-    <style name="Theme.CartaVu" parent="android:Theme.Material.Light.NoActionBar">
+    <style name="Theme.Rectobook" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
     </style>
