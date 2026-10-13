@@ -61,16 +61,19 @@ fun ReaderSettingsPanel(
     onDismiss: () -> Unit,
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        // A press anywhere off the panel puts it away. Drawn under the panel
-        // and given no indication, so nothing about it shows.
+        // A press off the panel is swallowed rather than taken as a way out.
+        // The slider sits near the panel's edge, and a thumb that slides off
+        // it would otherwise close the panel mid-adjustment and lose the tone
+        // being judged. Swallowed rather than let through, so it does not land
+        // on the page underneath either. Drawn under the panel and given no
+        // indication, so nothing about it shows.
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .clickable(
                     interactionSource = remember { MutableInteractionSource() },
                     indication = null,
-                    onClickLabel = stringResource(R.string.settings_close),
-                    onClick = onDismiss,
+                    onClick = {},
                 ),
         )
 
@@ -89,19 +92,19 @@ fun ReaderSettingsPanel(
                     .fillMaxSize()
                     .background(IndustryBackground.copy(alpha = 0.94f))
                     .border(1.dp, IndustryDivider)
-                    // The panel swallows its own presses: without this a touch
-                    // that misses a control would fall through to the catcher
-                    // behind and close the panel it was aimed at.
+                    // The panel swallows its own presses, so a touch that misses
+                    // a control stops here rather than reaching the catcher
+                    // behind it.
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null,
                         onClick = {},
                     ),
             ) {
-                // The panel is opened by a gesture and closed by two more - a
-                // tap outside it, or back. Neither is on screen, so the mark
-                // is: a panel you have to guess your way out of is one you
-                // stop opening. It is outside the scrolling column below for
+                // The panel is opened by a gesture and closed only by this mark
+                // or by back - a tap outside it does nothing. Back is not on
+                // screen, so the mark is: a panel you have to guess your way
+                // out of is one you stop opening. It is outside the scrolling column below for
                 // the same reason - a way out that scrolls off the top is one
                 // more thing to guess at from the bottom of the settings.
                 Row(

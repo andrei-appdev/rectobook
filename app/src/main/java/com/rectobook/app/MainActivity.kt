@@ -168,17 +168,20 @@ private val ChromeEasing = CubicBezierEasing(0.3f, 0.7f, 0.2f, 1f)
 private const val PAGE_WAIT_MS = 200L
 
 /**
- * The caliper marking each end of a selection - the same square mark the page
- * slider rides, rather than the teardrop Android draws.
+ * The caliper marking each end of a selection: a stem hanging from the foot of
+ * the line, with a square knob on it like the one the page slider rides,
+ * rather than the teardrop Android draws. The stem holds the knob below the
+ * line, so a finger on it leaves the text it is moving over in view.
  */
-private val HandleWidth = 3.dp
-private val HandleHeight = 14.dp
+private val HandleStem = 2.dp
+private val HandleStemLength = 10.dp
+private val HandleKnob = 12.dp
 
 /**
- * How near an end a finger must land to take hold of it. Generous, because the
- * mark is deliberately small and a fingertip is not.
+ * How near the knob a finger must land to take hold of it. Wider than the
+ * knob, because a fingertip is.
  */
-private val HandleReach = 28.dp
+private val HandleReach = 40.dp
 
 /** The rule drawn under a hyperlink. The design's hairline, in accent. */
 private val LinkRule = 1.5.dp
@@ -1187,13 +1190,21 @@ private fun PageView(
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val ends = selectionEnds(currentRects.value, size) ?: return@awaitEachGesture
-                    val reach = HandleReach.toPx()
-                    val grabbed = ends.any { (down.position - it).getDistance() <= reach }
-                    if (!grabbed) return@awaitEachGesture
+                    // The nearer end, so a selection of one short word - whose
+                    // two knobs both lie within reach - still moves the end
+                    // the finger was put on.
+                    val end = ends
+                        .minBy { (down.position - handleGrip(it)).getDistance() }
+                        .takeIf { (down.position - handleGrip(it)).getDistance() <= HandleReach.toPx() }
+                        ?: return@awaitEachGesture
+                    // The finger is on the knob, below the line. Without
+                    // taking that back off, the end would leap to the line
+                    // under the one it was on the moment the drag began.
+                    val grabOffset = down.position - end
                     down.consume()
                     drag(down.id) { change ->
                         change.consume()
-                        val (x, y) = fraction(change.position, size) ?: return@drag
+                        val (x, y) = fraction(change.position - grabOffset, size) ?: return@drag
                         scope.launch { viewModel.extendSelectionTo(x, y) }
                     }
                 }
@@ -1292,7 +1303,7 @@ private fun PageView(
         }
 
         // The selection is washed deeper than a search mark, and carries a
-        // caliper at each end - the same square marks the page slider uses,
+        // caliper at each end - a stem and a square knob ([HandleKnob]),
         // rather than the teardrops Android draws.
         if (selectionRects.isNotEmpty()) {
             Canvas(modifier = Modifier.matchParentSize()) {
@@ -1310,8 +1321,14 @@ private fun PageView(
                     ?.forEach { end ->
                         drawRect(
                             color = accent,
-                            topLeft = Offset(end.x - HandleWidth.toPx() / 2f, end.y),
-                            size = Size(HandleWidth.toPx(), HandleHeight.toPx()),
+                            topLeft = Offset(end.x - HandleStem.toPx() / 2f, end.y),
+                            size = Size(HandleStem.toPx(), HandleStemLength.toPx()),
+                        )
+                        val grip = handleGrip(end)
+                        drawRect(
+                            color = accent,
+                            topLeft = Offset(grip.x - HandleKnob.toPx() / 2f, grip.y - HandleKnob.toPx() / 2f),
+                            size = Size(HandleKnob.toPx(), HandleKnob.toPx()),
                         )
                     }
             }
@@ -1355,7 +1372,7 @@ private fun CopyBlock(onCopy: () -> Unit, modifier: Modifier = Modifier) {
 }
 
 /**
- * Where the copy block goes: under the selection, or over it when the
+ * Where the copy block goes: under the selection and its handles, or over it when the
  * selection runs too near the foot of the page. Kept inside the page either
  * way, so it cannot end up somewhere there is nothing to press.
  */
@@ -1363,8 +1380,11 @@ private fun Density.copyBlockOffset(rects: List<PageRect>, page: IntSize): IntOf
     val width = CopyBlockWidth.toPx()
     val height = CopyBlockHeight.toPx()
     val gap = 8.dp.toPx()
+    // Below, it clears the knobs hanging from the selection's ends as well,
+    // or it would sit on the very thing the reader reaches for to widen it.
+    val belowGap = HandleStemLength.toPx() + HandleKnob.toPx() + gap
 
-    val below = rects.maxOf { it.bottom } * page.height + gap
+    val below = rects.maxOf { it.bottom } * page.height + belowGap
     val above = rects.minOf { it.top } * page.height - height - gap
     val y = if (below + height <= page.height) below else above
 
@@ -1389,6 +1409,13 @@ private fun selectionEnds(rects: List<PageRect>, size: IntSize): List<Offset>? {
         Offset(last.right * size.width, last.bottom * size.height),
     )
 }
+
+/**
+ * The centre of the knob hanging from a selection end - where it is drawn,
+ * and where a finger is measured from when it reaches for it.
+ */
+private fun Density.handleGrip(end: Offset): Offset =
+    end + Offset(0f, HandleStemLength.toPx() + HandleKnob.toPx() / 2f)
 
 /**
  * Puts each system bar where the caller says.
