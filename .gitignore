@@ -12,6 +12,13 @@
 *.dex
 /app/build
 /app/release
+*.aab
+
+# The upload key and the passwords to it. Whoever holds both can publish as
+# this app, and a key that has been in the history cannot be taken back out.
+*.jks
+*.keystore
+/keystore.properties
 
 # Design review runs: screenshots taken from the emulator, and the notes
 # written against them. Regenerated whenever a review runs, and heavy enough
