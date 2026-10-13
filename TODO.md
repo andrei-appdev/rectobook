@@ -13,10 +13,11 @@
 - [ ] **Page rotation is unverified.** PDFium's page width and height are
       believed to account for `/Rotate`, but nothing tested here had a rotated
       page. A landscape scan is the case to check.
-- [ ] **Native code is now 13.2 MB across three ABIs**, of which PDFium is
-      4.9 MB on arm64 and 3.3 MB on armeabi-v7a. A device only installs its
-      own, so this is an App Bundle / ABI-splits question rather than a real
-      per-user cost - but the project builds one universal APK today.
+- [x] **Native code is 13.2 MB across three ABIs.** A release build now comes
+      out per ABI as well as universal (arm64 10.3 MB, universal 23.8 MB, from
+      29.6 MB before R8). Keep `app/build/outputs/mapping/release/mapping.txt`
+      with each GitHub release - without it, a user's stack trace from that
+      build cannot be retraced.
 
 ## Rendering
 

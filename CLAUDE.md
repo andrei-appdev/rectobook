@@ -29,6 +29,15 @@ The `$env:` assignment does not persist between tool calls — repeat it, or cha
 build and install in one call. A clean build compiles DjVuLibre for three ABIs
 and takes minutes; an incremental Kotlin build is seconds.
 
+`:app:assembleRelease` signs with the key named in `keystore.properties` and
+writes four APKs to `app/build/outputs/apk/release/`, then copies them to
+`app/build/outputs/github/` under their download names: `rectobook-<version>.apk`
+(universal) and `rectobook-<version>-<abi>.apk`. Release runs R8
+and resource shrinking, so it needs its own pass on a device - debug proves
+nothing about what the shrinker removed. Splits switch on whenever a task name
+contains "Release", so build debug and release in **separate** Gradle calls,
+or debug comes out split too and `app-debug.apk` is missing.
+
 For installing, launching, screenshotting and driving the UI on the emulator,
 **use the `run-on-emulator` skill** (`.claude/skills/run-on-emulator/`) — it
 carries the adb paths, the coordinate scaling, and the quirks that cost time

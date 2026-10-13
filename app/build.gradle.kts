@@ -15,6 +15,17 @@ val keystoreProperties = Properties().apply {
     if (file.exists()) file.inputStream().use { load(it) }
 }
 
+// The ABIs the app ships for. PdfiumAndroid also carries x86; DjVuLibre is not
+// built for it, so an x86 device handed that folder would open PDFs and crash
+// on the first DjVu.
+val abis = listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+
+// A release build comes out once per ABI as well as universal, for a GitHub
+// release where sideloaders may want the smaller file. Debug stays one
+// app-debug.apk, which is what the emulator workflow installs. AGP refuses
+// ndk.abiFilters alongside ABI splits, hence the filter switching with it.
+val splitByAbi = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+
 android {
     namespace = "com.rectobook.app"
     compileSdk = 35
@@ -29,14 +40,34 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        if (!splitByAbi) {
+            ndk {
+                abiFilters += abis
+            }
         }
 
         externalNativeBuild {
             cmake {
+                abiFilters += abis
                 arguments += listOf("-DANDROID_STL=c++_shared")
             }
+        }
+    }
+
+    splits {
+        abi {
+            isEnable = splitByAbi
+            reset()
+            include(*abis.toTypedArray())
+            isUniversalApk = true
+        }
+    }
+
+    // With the ndk filter switched off for splits, the universal APK would
+    // pick up PdfiumAndroid's x86 libraries again - see abis above.
+    packaging {
+        jniLibs {
+            excludes += "lib/x86/**"
         }
     }
 
@@ -61,7 +92,8 @@ android {
     buildTypes {
         release {
             signingConfig = signingConfigs.findByName("release")
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -82,6 +114,23 @@ android {
         buildConfig = true
     }
 }
+
+// The release APKs under the names a GitHub download should carry:
+// rectobook-0.1.apk for the universal one, rectobook-0.1-arm64-v8a.apk and so
+// on per ABI. Copied rather than renamed in place - AGP's own output naming
+// is a deprecated API, and debug keeps the app-debug.apk the emulator
+// workflow installs.
+val releaseApks = tasks.register<Sync>("releaseApks") {
+    val version = android.defaultConfig.versionName
+    dependsOn("assembleRelease")
+    from(layout.buildDirectory.dir("outputs/apk/release")) { include("*.apk") }
+    into(layout.buildDirectory.dir("outputs/github"))
+    rename { name ->
+        val abi = Regex("app-(.+)-release\\.apk").matchEntire(name)?.groupValues?.get(1)
+        if (abi == null || abi == "universal") "rectobook-$version.apk" else "rectobook-$version-$abi.apk"
+    }
+}
+tasks.matching { it.name == "assembleRelease" }.configureEach { finalizedBy(releaseApks) }
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
