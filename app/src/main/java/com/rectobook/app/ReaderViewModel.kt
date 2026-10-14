@@ -487,7 +487,8 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * Drags one end of the selection to ([x], [y]).
      *
-     * The other end stays where the selection was first made, so dragging back
+     * The other end stays on the anchor - the word the selection was first
+     * made on, or the end [holdSelectionEnd] pinned - so dragging back
      * past it turns the selection round rather than emptying it - which is what
      * a hand does when it overshoots.
      */
@@ -499,6 +500,25 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
             start = minOf(anchor.first, picked.first),
             end = maxOf(anchor.last, picked.last) + 1,
         )
+    }
+
+    /**
+     * Pins the end of the selection that is *not* about to be dragged, so
+     * [extendSelectionTo] moves only the one taken hold of.
+     *
+     * Without this the anchor stays the word the selection was first made on,
+     * and taking hold of that end would pull the other one back to it.
+     *
+     * Not suspending: it has to land before the first drag event is handled,
+     * and the page's text is already cached - the selection was made from it.
+     */
+    fun holdSelectionEnd(movingStart: Boolean) {
+        val current = _selection.value ?: return
+        if (current.isEmpty) return
+        val fixed = if (movingStart) current.end - 1 else current.start
+        val text = pageTextCache[current.page]
+        val word = text?.let { wordAround(it, fixed.coerceIn(0, it.length - 1)) } ?: fixed..fixed
+        _selection.value = current.copy(anchor = word)
     }
 
     fun clearSelection() {

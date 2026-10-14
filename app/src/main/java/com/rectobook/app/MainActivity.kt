@@ -1181,10 +1181,9 @@ private fun PageView(
                     },
                 )
             }
-            // Afterwards, either end can be taken and moved. Both ends are
-            // measured from the word the selection started on, so it does not
-            // matter which one is held - dragging out widens it and dragging
-            // back past the start turns it round.
+            // Afterwards, either end can be taken and moved. Taking one pins
+            // the other where it is, so dragging out widens the selection and
+            // dragging back past the pinned end turns it round.
             .pointerInput(pageNumber, selection != null) {
                 if (selection == null) return@pointerInput
                 awaitEachGesture {
@@ -1197,6 +1196,7 @@ private fun PageView(
                         .minBy { (down.position - handleGrip(it)).getDistance() }
                         .takeIf { (down.position - handleGrip(it)).getDistance() <= HandleReach.toPx() }
                         ?: return@awaitEachGesture
+                    viewModel.holdSelectionEnd(movingStart = end == ends.first())
                     // The finger is on the knob, below the line. Without
                     // taking that back off, the end would leap to the line
                     // under the one it was on the moment the drag began.
