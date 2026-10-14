@@ -101,6 +101,18 @@
     <!-- About -->
     <string name="about_title">О приложении</string>
     <string name="about_version">Версия %1$s</string>
+    <string name="about_description">Приложение для чтения файлов в форматах DjVu и PDF.</string>
+    <string name="about_licence_title">Лицензия</string>
+    <string name="about_licence_body">Приложение Rectobook распространяется на условиях лицензии GNU General Public License версии 2 или любой более поздней версии. Приложение предоставляется без каких-либо гарантий.</string>
+    <string name="about_licence_link">Текст лицензии</string>
+    <string name="about_source_title">Исходный код</string>
+    <string name="about_source_link">Открыть на GitHub</string>
+    <string name="about_feedback_title">Обратная связь</string>
+    <string name="about_feedback_link">Сообщить об ошибке или направить предложение</string>
+    <string name="about_credits_title">Сторонние компоненты</string>
+    <string name="about_credit_djvulibre">DjVuLibre — обработка файлов DjVu, GNU GPL 2.0 или более поздняя версия</string>
+    <string name="about_credit_pdfium">PDFium и PdfiumAndroid — обработка файлов PDF, BSD и Apache 2.0</string>
+    <string name="about_credit_fira">Fira Sans — шрифт, SIL Open Font License 1.1</string>
 
     <!-- Opening a document that will not open -->
     <string name="error_open_document">Не удалось открыть документ:\n%1$s</string>

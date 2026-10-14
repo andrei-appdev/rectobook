@@ -100,6 +100,18 @@
     <!-- About -->
     <string name="about_title">Acerca de</string>
     <string name="about_version">Versión %1$s</string>
+    <string name="about_description">Aplicación para leer archivos en formato DjVu y PDF.</string>
+    <string name="about_licence_title">Licencia</string>
+    <string name="about_licence_body">Rectobook se distribuye según los términos de la Licencia Pública General de GNU, versión 2 o cualquier versión posterior. La aplicación se proporciona sin ninguna garantía.</string>
+    <string name="about_licence_link">Leer la licencia</string>
+    <string name="about_source_title">Código fuente</string>
+    <string name="about_source_link">Ver en GitHub</string>
+    <string name="about_feedback_title">Comentarios</string>
+    <string name="about_feedback_link">Informar de un error o enviar una sugerencia</string>
+    <string name="about_credits_title">Componentes de terceros</string>
+    <string name="about_credit_djvulibre">DjVuLibre: procesamiento de archivos DjVu, GNU GPL 2.0 o posterior</string>
+    <string name="about_credit_pdfium">PDFium y PdfiumAndroid: procesamiento de archivos PDF, BSD y Apache 2.0</string>
+    <string name="about_credit_fira">Fira Sans: tipografía, SIL Open Font License 1.1</string>
 
     <!-- Opening a document that will not open -->
     <string name="error_open_document">No se ha podido abrir el documento:\n%1$s</string>

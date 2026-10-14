@@ -1,30 +1,8 @@
 # Rectobook
 
-An Android reader for DjVu and PDF documents, aimed at scanned books and
-technical literature. DjVu decoding is done natively by a vendored DjVuLibre
-reached through a hand-written JNI layer; PDF goes through PDFium.
-
-- **Format abstraction.** Both formats implement one `PagedDocument` interface
-  (page count and size, render, region render, text layer, character hit-testing,
-  links, outline). The format is sniffed from the file's bytes, and the UI never
-  branches on it.
-- **Two-layer rendering.** Each page is rendered once at fit-width. Zooming past
-  that draws viewport-sized tiles over it, cut from the page at the current
-  scale, so detail stays sharp at any zoom without a full-page bitmap growing
-  with it. Pages and tiles have separate LRU caches.
-- **Text layer.** Full-text search, word selection and internal and external
-  links, from the DjVu OCR layer or PDF text. Geometry crosses the native
-  boundary as fractions of the page, so highlights land at every zoom.
-- **Native boundary.** Structured results (words, links, outline) cross JNI as
-  one big-endian `ByteArray` rather than as Java strings, since OCR text is not
-  guaranteed to be valid modified UTF-8. All native calls run off the main
-  thread and are serialised against document close by a coroutine `Mutex`.
-- **Contrast.** A levels stretch for faded scans, applied as a draw-time
-  `ColorFilter` rather than baked into decoded bitmaps.
-- **Documents and library.** `content://` URIs from the system picker or another
-  app are copied into the cache and opened by path; recent documents persist in
-  a Preferences DataStore.
-  - Light and dark themes following the system; English, Russian and Spanish.
+A simple, lightweight reader for DjVu and PDF books on Android. It is made for
+scanned books, textbooks and papers: open a file and read, with nothing in the
+way. No ads, no tracking, no account - and it is free software (GPL).
 
 ## Technology stack
 
