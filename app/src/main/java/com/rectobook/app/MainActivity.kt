@@ -698,7 +698,10 @@ private fun DocumentReader(
                     // Two taps in the time the system allows between them. A
                     // hold is not this gesture any more: a hold that travels
                     // is a selection, and the page below reads it as one.
-                    onDoubleTap = { showSettings = true },
+                    //
+                    // Off for now, and the panel with it from the reader - put
+                    // `{ showSettings = true }` back to bring it back.
+                    onDoubleTap = null,
                 )
                 // A tap puts the selection down, wherever on the reader it
                 // falls - the page it was made on, another page, or the space
@@ -1472,7 +1475,8 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
  * is reported with where it landed - as a double tap if a second one followed
  * it inside the system's window, otherwise as a tap. The design toggles the
  * chrome on a tap, a tap that finds a link follows it instead, and a double
- * tap opens the settings panel.
+ * tap opens the settings panel. Without [onDoubleTap] a tap is reported as
+ * soon as it lifts.
  *
  * All of them are recognised here rather than in a second `pointerInput` so
  * that a pinch, or a scroll that happens to end where it began, cannot also
@@ -1491,8 +1495,8 @@ private fun Modifier.pinchToZoom(
     onZoom: (scale: Float, focus: Offset) -> Unit,
     onEnd: () -> Unit,
     onTap: (Offset) -> Unit,
-    onDoubleTap: (Offset) -> Unit,
-): Modifier = pointerInput(enabled) {
+    onDoubleTap: ((Offset) -> Unit)?,
+): Modifier = pointerInput(enabled, onDoubleTap == null) {
     if (!enabled) return@pointerInput
     awaitEachGesture {
         var down = awaitFirstDown(requireUnconsumed = false)
@@ -1538,8 +1542,14 @@ private fun Modifier.pinchToZoom(
             if (!still || held) return@awaitEachGesture
 
             val first = pending
-            if (first != null) {
+            if (first != null && onDoubleTap != null) {
                 onDoubleTap(first)
+                return@awaitEachGesture
+            }
+            // With nothing to tell a double tap apart for, the tap need not
+            // wait out the window for one.
+            if (onDoubleTap == null) {
+                onTap(down.position)
                 return@awaitEachGesture
             }
             pending = down.position
